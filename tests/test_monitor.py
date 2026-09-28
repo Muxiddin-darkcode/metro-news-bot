@@ -83,5 +83,17 @@ class TestStrictMetroMonitoring(unittest.TestCase):
         if test_cache_file.exists():
             test_cache_file.unlink()
 
+    def test_group_id_and_target_chats(self):
+        from config import Settings
+        s = Settings(ADMIN_IDS="111,222", GROUP_ID="-100987654321")
+        self.assertEqual(s.admin_id_list, [111, 222])
+        self.assertEqual(s.group_id_list, [-100987654321])
+        self.assertEqual(s.target_chat_ids, [111, 222, -100987654321])
+
+        # Test empty group ID
+        s_empty = Settings(ADMIN_IDS="111,222", GROUP_ID="")
+        self.assertEqual(s_empty.target_chat_ids, [111, 222])
+
 if __name__ == "__main__":
     unittest.main()
+

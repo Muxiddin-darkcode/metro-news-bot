@@ -99,8 +99,10 @@ Adminlar Telegram orqali botga quyidagi komandalarni berishi mumkin:
 - `/start` — Tizim bilan tanishuv va tezkor klaviatura;
 - `/status` — Tizim holati (oxirgi tekshiruv vaqti, qancha soniya ketgani, keshdagi xabarlar soni);
 - `/check` — 80 ta manbani navbatdan tashqari darhol tekshirish;
+- `/id` — Chat yoki Guruh ID sini aniqlash (guruhga qo'shib /id yozilsa, uning ID sini beradi);
 - `/sources` — Hozirda kuzatilayotgan 40 ta kanal va 40 ta sayt ro'yxati;
 - `/keywords` — Hozirgi filtr kalit so'zlari.
+
 
 ---
 

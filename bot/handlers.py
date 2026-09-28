@@ -54,6 +54,9 @@ def build_status_text() -> str:
     web_count = len(source_manager.web_sources)
     total_sources = tg_count + web_count
     
+    group_count = len(settings.group_id_list)
+    group_info = f"\n📢 <b>Ulangan guruhlar:</b> {group_count} ta" if group_count > 0 else "\n📢 <b>Ulangan guruh:</b> Hali ulanmagan"
+
     return (
         "📊 <b>TIZIM HOLATI VA STATISTIKASI:</b>\n\n"
         "🟢 <b>Status:</b> 24/7 Faol (Monitoring ishlamoqda)\n"
@@ -66,6 +69,23 @@ def build_status_text() -> str:
         f"🗂️ <b>Keshdagi xabarlar (No-DB):</b> {storage.count} ta\n"
         f"🧠 <b>Antidublikat xotirasi (24 soat):</b> {len(deduplicator._history)} ta voqea\n"
         f"👥 <b>Ruxsat etilgan adminlar:</b> {len(settings.admin_id_list)} ta"
+        f"{group_info}"
+    )
+
+@router.message(Command("id", "group_id", "getid"))
+async def cmd_get_id(message: Message):
+    chat = message.chat
+    chat_type = chat.type
+    chat_id = chat.id
+    chat_title = chat.title or chat.full_name or "Chat"
+    
+    await message.answer(
+        f"📋 <b>CHAT MA'LUMOTLARI:</b>\n\n"
+        f"🏷️ <b>Nomi:</b> {chat_title}\n"
+        f"📁 <b>Turi:</b> <code>{chat_type}</code>\n"
+        f"🆔 <b>Chat ID:</b> <code>{chat_id}</code>\n\n"
+        f"💡 <i>Guruhga xabarlar borishi uchun ushbu ID ni .env faylidagi <code>GROUP_ID={chat_id}</code> qatoriga qo'ying.</i>",
+        parse_mode="HTML"
     )
 
 @router.message(Command("status"))
@@ -75,8 +95,12 @@ async def cmd_status(message: Message):
 
 @router.callback_query(F.data == "btn_status")
 async def callback_status(call: CallbackQuery):
+    if call.from_user.id not in settings.admin_id_list:
+        await call.answer("Faqat adminlar uchun!", show_alert=True)
+        return
     await call.answer()
     await call.message.answer(build_status_text(), parse_mode="HTML", reply_markup=get_main_keyboard())
+
 
 @router.message(Command("check"))
 @router.message(F.text.contains("Hozir tekshirish") | F.text.contains("HOZIR TEKSHIRISH"))
@@ -107,6 +131,9 @@ async def cmd_check(message: Message):
 
 @router.callback_query(F.data == "btn_check_now")
 async def callback_check_now(call: CallbackQuery):
+    if call.from_user.id not in settings.admin_id_list:
+        await call.answer("Faqat adminlar uchun!", show_alert=True)
+        return
     await call.answer("Tekshiruv boshlandi...", show_alert=False)
     status_msg = await call.message.answer(
         "⏳ <b>Barcha manbalar qayta tekshirilmoqda...</b>",

@@ -12,6 +12,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 class Settings(BaseSettings):
     BOT_TOKEN: str = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
     ADMIN_IDS: str = "123456789,987654321"
+    GROUP_ID: str = ""
     CHECK_INTERVAL_SECONDS: int = 60
     MAX_CONCURRENT_REQUESTS: int = 15
     SIMILARITY_THRESHOLD: float = 0.65
@@ -36,9 +37,32 @@ class Settings(BaseSettings):
         ids = []
         for part in self.ADMIN_IDS.split(","):
             part = part.strip()
-            if part.isdigit():
+            try:
                 ids.append(int(part))
+            except ValueError:
+                pass
         return ids
+
+    @property
+    def group_id_list(self) -> List[int]:
+        groups = []
+        if self.GROUP_ID:
+            for part in str(self.GROUP_ID).split(","):
+                part = part.strip()
+                try:
+                    groups.append(int(part))
+                except ValueError:
+                    pass
+        return groups
+
+    @property
+    def target_chat_ids(self) -> List[int]:
+        """Adminlar va guruh(lar)ning barcha unikal ID lari."""
+        res = []
+        for cid in self.admin_id_list + self.group_id_list:
+            if cid not in res:
+                res.append(cid)
+        return res
 
 settings = Settings()
 

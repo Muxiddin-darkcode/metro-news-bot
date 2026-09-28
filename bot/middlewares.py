@@ -5,8 +5,10 @@ from config import settings, logger
 
 class AdminOnlyMiddleware(BaseMiddleware):
     """
-    Faqat 2 ta ruxsat etilgan Adminga ruxsat beruvchi xavfsizlik filtri.
-    Begona foydalanuvchilar botga yozsa, ularga hech qanday ma'lumot ko'rinmaydi.
+    Xavfsizlik filtri:
+    - Shaxsiy chatda (private): Faqat ruxsat etilgan adminlarga javob beradi.
+    - Guruhda (group/supergroup): Oddiy xabarlarga jim turadi (guruhni bezovta qilmaydi),
+      faqat /id komandasi yoki adminlar yozgandagina ishlaydi.
     """
     async def __call__(
         self,
@@ -14,21 +16,34 @@ class AdminOnlyMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
-        user_id = None
-        if isinstance(event, Message) and event.from_user:
-            user_id = event.from_user.id
-
-        admin_ids = settings.admin_id_list
-
-        if user_id and user_id in admin_ids:
-            return await handler(event, data)
-
-        logger.warning(f"Ruxsatsiz kirishga urinish: User ID {user_id}")
         if isinstance(event, Message):
+            chat = event.chat
+            user_id = event.from_user.id if event.from_user else None
+            admin_ids = settings.admin_id_list
+
+            # Guruh yoki superguruhdagi xabarlar
+            if chat and chat.type in ("group", "supergroup"):
+                # Guruh ID sini bilish uchun /id yoki /group_id
+                if event.text and event.text.startswith(("/id", "/getid", "/group_id")):
+                    return await handler(event, data)
+                # Agar guruhda admin yozayotgan bo'lsa
+                if user_id and user_id in admin_ids:
+                    return await handler(event, data)
+                # Guruhdagi boshqa oddiy foydalanuvchilar suhbatiga bot aralashmaydi
+                return None
+
+            # Shaxsiy chat (Private)
+            if user_id and user_id in admin_ids:
+                return await handler(event, data)
+
+            logger.warning(f"Ruxsatsiz kirishga urinish: User ID {user_id}")
             await event.answer(
                 "⛔ <b>Kirish cheklangan</b>\n\n"
                 "Ushbu bot xizmati yopiq monitoring tizimi bo'lib, "
-                "faqatgina tayinlangan 2 ta tizim administratoriga xizmat ko'rsatadi.",
+                "faqatgina tayinlangan tizim administratoriga xizmat ko'rsatadi.",
                 parse_mode="HTML"
             )
-        return None
+            return None
+
+        return await handler(event, data)
+

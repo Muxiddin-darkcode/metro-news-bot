@@ -79,21 +79,21 @@ async def send_metro_alert(bot: Bot, item: NewsItem) -> int:
         ]
     )
 
-    admin_ids = settings.admin_id_list
+    target_chats = settings.target_chat_ids
     successful_deliveries = 0
 
-    for admin_id in admin_ids:
+    for chat_id in target_chats:
         try:
             await bot.send_message(
-                chat_id=admin_id,
+                chat_id=chat_id,
                 text=text,
                 parse_mode="HTML",
                 reply_markup=keyboard,
                 disable_web_page_preview=False
             )
             successful_deliveries += 1
-            logger.info(f"Xabar adminga yetkazildi: User ID {admin_id}")
+            logger.info(f"Xabar muvaffaqiyatli yetkazildi: Chat ID {chat_id}")
         except Exception as e:
-            logger.error(f"Adminga ({admin_id}) xabar yetkazishda xatolik: {e}")
+            logger.error(f"Chatga ({chat_id}) xabar yetkazishda xatolik: {e}")
 
     return successful_deliveries

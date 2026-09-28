@@ -2,6 +2,7 @@ import os
 import sys
 import asyncio
 import logging
+import httpx
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
@@ -13,6 +14,8 @@ from parsers.manager import source_manager
 from bot.middlewares import AdminOnlyMiddleware
 from bot.handlers import router as admin_router
 from bot.notifier import send_metro_alert
+
+health_runner = None
 
 async def monitor_background_loop(bot: Bot):
     """
@@ -48,15 +51,44 @@ async def monitor_background_loop(bot: Bot):
 
 async def start_health_server():
     """Render va boshqa bulutli serverlar uchun bepul HTTP port eshituvchisi."""
+    global health_runner
     port = int(os.environ.get("PORT", 8080))
     app = web.Application()
     app.router.add_get("/", lambda req: web.Response(text="🚇 Metro News Monitoring Bot is Running 24/7!"))
     app.router.add_get("/health", lambda req: web.Response(text="OK"))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
+    health_runner = web.AppRunner(app)
+    await health_runner.setup()
+    site = web.TCPSite(health_runner, "0.0.0.0", port)
     await site.start()
     logger.info(f"Health-check veb server {port}-portda ishga tushirildi.")
+
+async def keep_alive_loop():
+    """
+    Render Free Web Service 15 daqiqada uxlab (spin down) qolmasligi uchun
+    har 7 daqiqada serverning /health manziliga so'rov yuborib, uyg'oq ushlab turadi.
+    """
+    await asyncio.sleep(60)  # Server to'liq ko'tarilishini kutish
+    external_url = (
+        os.environ.get("RENDER_EXTERNAL_URL") or 
+        os.environ.get("SELF_PING_URL") or 
+        "https://metro-news-bot.onrender.com"
+    ).rstrip("/")
+    health_url = f"{external_url}/health"
+    logger.info(f"Keep-alive self-ping xizmati ishga tushdi: {health_url}")
+
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+                resp = await client.get(health_url)
+                if resp.status_code == 200:
+                    logger.info("Keep-alive ping muvaffaqiyatli: Server 24/7 faol holatda.")
+                else:
+                    logger.warning(f"Keep-alive ping status: {resp.status_code}")
+        except Exception as e:
+            logger.debug(f"Keep-alive ping xatosi (qayta uriniladi): {e}")
+
+        # Har 7 daqiqada (420 soniya) ping yuborish (Render 15 daqiqada uxlaydi)
+        await asyncio.sleep(420)
 
 async def run_bot():
     """Asosiy bot va monitoringni ishga tushirish funksiyasi."""
@@ -95,8 +127,17 @@ async def run_bot():
     dp.message.middleware(AdminOnlyMiddleware())
     dp.include_router(admin_router)
 
+    # Avvalgi webhook va qolib ketgan xabarlarni tozalash (polling xatosiz boshlanishi uchun)
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Webhook tozalandi va kutayotgan eski yangilanishlar olib tashlandi.")
+    except Exception as e:
+        logger.warning(f"Webhook tozalashda xatolik: {e}")
+
     # Orqa fondagi monitoring vazifasini ishga tushirish
     monitor_task = asyncio.create_task(monitor_background_loop(bot))
+    # Render uxlamasligi uchun keep-alive vazifasi
+    keep_alive_task = asyncio.create_task(keep_alive_loop())
 
     logger.info(
         f"Metro Monitoring Bot muvaffaqiyatli ishga tushdi! "
@@ -104,10 +145,20 @@ async def run_bot():
     )
 
     try:
-        # Bot pollingni boshlash
-        await dp.start_polling(bot)
+        # Bot pollingni uzluksiz, avtomatik qayta tiklanuvchi rejimda boshlash
+        while True:
+            try:
+                await dp.start_polling(bot, handle_signals=False)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.error(f"Telegram pollingda kutilmagan uzilish: {exc}. 5 soniyadan so'ng qayta ulanadi...")
+                await asyncio.sleep(5)
     finally:
         monitor_task.cancel()
+        keep_alive_task.cancel()
+        if health_runner:
+            await health_runner.cleanup()
         await bot.session.close()
         logger.info("Bot to'xtatildi.")
 
@@ -116,3 +167,4 @@ if __name__ == "__main__":
         asyncio.run(run_bot())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Dastur to'xtatildi.")
+

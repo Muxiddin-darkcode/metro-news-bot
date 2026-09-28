@@ -1,0 +1,24 @@
+# Maxfiy kalitlar va tokenlar (.env hech qachon githubga chiqmasligi shart)
+.env
+
+# Python virtual muhiti
+.venv/
+env/
+venv/
+
+# Python kesh fayllari
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Foydalanuvchi ma'lumotlari va dinamik keshlar
+data/seen_posts.json
+data/seen_fingerprints.json
+data/test_fingerprints.json
+
+# IDE va tizim fayllari
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

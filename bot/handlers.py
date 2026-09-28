@@ -3,7 +3,7 @@ import datetime
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
-from config import settings
+from config import settings, format_uz_time
 from core.storage import storage
 from core.deduplicator import deduplicator
 from parsers.manager import source_manager
@@ -45,11 +45,10 @@ async def cmd_start(message: Message):
     )
 
 def build_status_text() -> str:
-    """Tizim holati matnini formatlash."""
+    """Tizim holati matnini formatlash (O'zbekiston vaqti bilan)."""
     last_time = "Hali tekshirilmadi"
     if source_manager.last_check_time > 0:
-        dt = datetime.datetime.fromtimestamp(source_manager.last_check_time)
-        last_time = dt.strftime("%H:%M:%S | %d.%m.%Y")
+        last_time = format_uz_time(source_manager.last_check_time, "%H:%M:%S | %d.%m.%Y")
 
     tg_count = len(source_manager.telegram_channels)
     web_count = len(source_manager.web_sources)

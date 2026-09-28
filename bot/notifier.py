@@ -3,14 +3,22 @@ import datetime
 import logging
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import settings
+from config import settings, format_uz_time
 from parsers.base import NewsItem
+
 
 logger = logging.getLogger("MetroMonitor.Notifier")
 
 def format_alert_message(item: NewsItem) -> str:
-    """Xabarni chiroyli va qulay HTML ko'rinishida formatlash."""
-    now_str = datetime.datetime.now().strftime("%H:%M | %d.%m.%Y")
+    """Xabarni chiroyli va qulay HTML ko'rinishida formatlash (O'zbekiston vaqti bilan)."""
+    now_str = format_uz_time(fmt="%H:%M | %d.%m.%Y")
+    if item.published_at:
+        try:
+            pub_str = item.published_at.replace("Z", "+00:00")
+            pub_dt = datetime.datetime.fromisoformat(pub_str)
+            now_str = format_uz_time(pub_dt, fmt="%H:%M | %d.%m.%Y")
+        except Exception:
+            pass
     
     # HTML maxsus belgilarini tozalash
     title_safe = html.escape(item.title.strip())

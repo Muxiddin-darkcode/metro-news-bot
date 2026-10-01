@@ -22,7 +22,7 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
             KeyboardButton(text="📊 Tizim holati", style="primary")
         ],
         [
-            KeyboardButton(text="🌐 Manbalar (80 ta)", style="primary"),
+            KeyboardButton(text="🌐 Manbalar", style="primary"),
             KeyboardButton(text="🏷️ Kalit so'zlar", style="primary")
         ]
     ]
@@ -30,19 +30,23 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
+    tg_count = len(source_manager.telegram_channels)
+    web_count = len(source_manager.web_sources)
+    total_count = tg_count + web_count
     await message.answer(
         "👋 <b>Assalomu alaykum, Administrator!</b>\n\n"
         "🚇 <b>Toshkent Metropoliteni Monitoring Tizimi</b> faol holatda ishlamoqda.\n\n"
-        "Tizim 24/7 rejimida:\n"
-        "• <b>40 ta eng yirik O'zbekiston Telegram kanallari</b>\n"
-        "• <b>OAV va rasmiy transport veb-saytlari</b>\n"
+        f"Tizim 24/7 rejimida {total_count} ta manbani kuzatadi:\n"
+        f"• <b>{tg_count} ta eng yirik O'zbekiston Telegram kanallari</b>\n"
+        f"• <b>{web_count} ta OAV va rasmiy transport veb-saytlari</b>\n"
         "oqimini doimiy tahlil qiladi.\n\n"
         "Metroga oid yangilik, nosozlik yoki kechikish chiqishi bilanoq "
-        "sizga birinchilardan bo'lib yetkaziladi.\n\n"
+        "darhol guruh va adminlarga yetkaziladi.\n\n"
         "Boshqaruv uchun quyidagi rangli tugmalardan foydalanishingiz mumkin:",
         reply_markup=get_main_keyboard(),
         parse_mode="HTML"
     )
+
 
 def build_status_text() -> str:
     """Tizim holati matnini formatlash (O'zbekiston vaqti bilan)."""
@@ -156,14 +160,17 @@ async def callback_check_now(call: CallbackQuery):
 @router.message(Command("sources"))
 @router.message(F.text.contains("Manbalar") | F.text.contains("MANBALAR"))
 async def cmd_sources(message: Message):
-    tg_samples = [f"@{ch['username']}" for ch in source_manager.telegram_channels[:15]]
-    web_samples = [src['name'] for src in source_manager.web_sources[:12]]
+    tg_count = len(source_manager.telegram_channels)
+    web_count = len(source_manager.web_sources)
+    total_count = tg_count + web_count
+    tg_samples = [f"@{ch['username']}" for ch in source_manager.telegram_channels[:18]]
+    web_samples = [src['name'] for src in source_manager.web_sources[:10]]
 
     text = (
-        "🌐 <b>KUZATILAYOTGAN 80 TA ASOSIY MANBA:</b>\n\n"
-        f"📱 <b>Telegram Kanallar (40 ta):</b>\n"
-        f"{', '.join(tg_samples)} va yana 25 ta...\n\n"
-        f"💻 <b>Yangilik Veb-Saytlari (25+ ta):</b>\n"
+        f"🌐 <b>KUZATILAYOTGAN {total_count} TA ASOSIY MANBA:</b>\n\n"
+        f"📱 <b>Telegram Kanallar ({tg_count} ta):</b>\n"
+        f"{', '.join(tg_samples)} va yana {max(0, tg_count - len(tg_samples))} ta...\n\n"
+        f"💻 <b>Yangilik Veb-Saytlari ({web_count} ta):</b>\n"
         f"{', '.join(web_samples)} va yana boshqalar...\n\n"
         "<i>Barcha manbalar data/sources.json faylida jamlangan.</i>"
     )

@@ -15,17 +15,30 @@ from bot.middlewares import AdminOnlyMiddleware
 from bot.handlers import router as admin_router
 from bot.notifier import send_metro_alert
 
+import collections
+
+log_buffer = collections.deque(maxlen=200)
+
+class BufferLogHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            log_buffer.append(self.format(record))
+        except Exception:
+            pass
+
+_buf_handler = BufferLogHandler()
+_buf_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+logging.getLogger().addHandler(_buf_handler)
+
 health_runner = None
 
 async def monitor_background_loop(bot: Bot):
     """
     24/7 orqa fonda ishlovchi asinxron kuzatuvchi.
     Har CHECK_INTERVAL_SECONDS (masalan 60s) vaqtda barcha 80 ta manbani
-    tekshirib, yangi metro xabarlarini darhol 2 ta adminga yetkazadi.
+    tekshirib, yangi metro xabarlarini darhol adminlar va guruhga yetkazadi.
     """
     logger.info("Asinxron monitoring tsikli ishga tushirildi...")
-    
-    # Dastlabki yuklanishda kutish (bot to'liq ishga tushishi uchun)
     await asyncio.sleep(3)
 
     while True:
@@ -34,7 +47,7 @@ async def monitor_background_loop(bot: Bot):
             new_alerts, stats = await source_manager.scan_all_sources()
 
             if new_alerts:
-                logger.info(f"🚨 {len(new_alerts)} ta yangi metro xabari topildi! Adminlarga yuborilmoqda...")
+                logger.info(f"🚨 {len(new_alerts)} ta yangi metro xabari topildi! Yuborilmoqda...")
                 for item in new_alerts:
                     await send_metro_alert(bot, item)
             else:
@@ -46,21 +59,35 @@ async def monitor_background_loop(bot: Bot):
         except Exception as e:
             logger.error(f"Monitoring tsiklida kutilmagan xatolik: {e}", exc_info=True)
 
-        # Keyingi tekshiruvgacha kutish
         await asyncio.sleep(settings.CHECK_INTERVAL_SECONDS)
 
 async def start_health_server():
-    """Render va boshqa bulutli serverlar uchun bepul HTTP port eshituvchisi."""
+    """Render va boshqa bulutli serverlar uchun bepul HTTP port eshituvchisi va holat/log tekshiruvi."""
     global health_runner
     port = int(os.environ.get("PORT", 8080))
     app = web.Application()
     app.router.add_get("/", lambda req: web.Response(text="🚇 Metro News Monitoring Bot is Running 24/7!"))
     app.router.add_get("/health", lambda req: web.Response(text="OK"))
+    app.router.add_get("/logs", lambda req: web.Response(
+        text="\n".join(log_buffer) if log_buffer else "Hali loglar yo'q.",
+        content_type="text/plain; charset=utf-8"
+    ))
+    app.router.add_get("/status", lambda req: web.Response(
+        text=(
+            f"Bot Token bor: {bool(settings.BOT_TOKEN and 'YOUR' not in settings.BOT_TOKEN)}\n"
+            f"Adminlar: {settings.admin_id_list}\n"
+            f"Guruhlar: {settings.group_id_list}\n"
+            f"Jami yuboriladigan chatlar: {settings.target_chat_ids}\n"
+            f"Manbalar tekshiruvi: {source_manager.last_check_duration:.2f}s ketdi\n"
+        ),
+        content_type="text/plain; charset=utf-8"
+    ))
     health_runner = web.AppRunner(app)
     await health_runner.setup()
     site = web.TCPSite(health_runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"Health-check veb server {port}-portda ishga tushirildi.")
+    logger.info(f"Health-check veb server {port}-portda ishga tushirildi. (/health, /logs, /status faol)")
+
 
 async def keep_alive_loop():
     """

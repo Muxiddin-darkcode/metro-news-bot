@@ -59,6 +59,21 @@ class TestStrictMetroMonitoring(unittest.TestCase):
         )
         self.assertFalse(is_bb)
 
+        # 4. Ko'chmas mulk / Uy-joy reklamasi
+        is_ad, _ = is_metro_related(
+            "Chilonzorda metroga yaqin 3 xonali kvartira sotiladi",
+            "Yangi ta'mirdan chiqqan, narxi 55000$, telefon: +998901234567"
+        )
+        self.assertFalse(is_ad, "Metro yaqinidagi kvartira reklamasi o'tmasligi shart!")
+
+        # 5. Sport va yengil atletika masofasi (200 metr yugurish / medal)
+        is_sport, _ = is_metro_related(
+            "31 медаль за неделю: как Узбекистан выступает на Азиатских играх-2026",
+            "на дистанции 200 метров Шохсанам Шерзодова опередила соперниц"
+        )
+        self.assertFalse(is_sport, "Sportdagi 200 metr masofa metro deb qabul qilinmasligi shart!")
+
+
     def test_cross_source_deduplication(self):
         test_cache_file = Path("data/test_fingerprints.json")
         if test_cache_file.exists():

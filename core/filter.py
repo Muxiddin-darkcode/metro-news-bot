@@ -1,5 +1,66 @@
 import re
-from typing import List, Tuple
+import json
+from pathlib import Path
+from typing import List, Tuple, Dict
+from config import DATA_DIR
+
+CUSTOM_KEYWORDS_FILE = DATA_DIR / "custom_keywords.json"
+_custom_keywords_cache: List[str] = []
+
+def load_custom_keywords() -> List[str]:
+    """Admin tomonidan qo'shilgan maxsus kalit so'zlarni yuklash."""
+    global _custom_keywords_cache
+    if CUSTOM_KEYWORDS_FILE.exists():
+        try:
+            with open(CUSTOM_KEYWORDS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    _custom_keywords_cache = [str(k).strip().lower() for k in data if str(k).strip()]
+                    return _custom_keywords_cache
+        except Exception:
+            pass
+    _custom_keywords_cache = []
+    return _custom_keywords_cache
+
+def save_custom_keywords(keywords: List[str]) -> bool:
+    """Maxsus kalit so'zlarni faylga saqlash."""
+    global _custom_keywords_cache
+    try:
+        CUSTOM_KEYWORDS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        unique_kws = sorted(list({str(k).strip().lower() for k in keywords if str(k).strip()}))
+        with open(CUSTOM_KEYWORDS_FILE, "w", encoding="utf-8") as f:
+            json.dump(unique_kws, f, ensure_ascii=False, indent=2)
+        _custom_keywords_cache = unique_kws
+        return True
+    except Exception:
+        return False
+
+def add_custom_keyword(keyword: str) -> bool:
+    """Yangi kalit so'z qo'shish."""
+    k = keyword.strip().lower()
+    if not k or len(k) < 3:
+        return False
+    current = load_custom_keywords()
+    if k in current:
+        return True
+    current.append(k)
+    return save_custom_keywords(current)
+
+def remove_custom_keyword(keyword: str) -> bool:
+    """Mavjud kalit so'zni o'chirish."""
+    k = keyword.strip().lower()
+    current = load_custom_keywords()
+    if k not in current:
+        return False
+    current.remove(k)
+    return save_custom_keywords(current)
+
+def get_custom_keywords() -> List[str]:
+    """Kalit so'zlar ro'yxatini olish."""
+    return load_custom_keywords()
+
+load_custom_keywords()
+
 
 # Aniqlik bilan faqat Metro va Metropolitenni tutuvchi qat'iy regex qoliplari (O'zbek Lotin, O'zbek Kirill, Rus)
 METRO_EXPLICIT_PATTERNS = [
@@ -207,6 +268,15 @@ def is_metro_related(title: str, content: str) -> Tuple[bool, List[str]]:
                 matched_tags.append(line_tag)
             break
 
+    # 7.5 Dinamik maxsus kalit so'zlar tekshiruvi (Admin qo'shgan)
+    for kw in _custom_keywords_cache:
+        if kw and kw in cleaned:
+            is_metro = True
+            tag = "#" + kw.replace(" ", "_").replace("'", "")[:20]
+            if tag not in matched_tags:
+                matched_tags.append(tag)
+            break
+
     if not is_metro:
         return False, []
 
@@ -216,3 +286,95 @@ def is_metro_related(title: str, content: str) -> Tuple[bool, List[str]]:
             matched_tags.append(tag)
 
     return True, matched_tags[:6]
+
+def explain_filter(title: str, content: str) -> Dict:
+    """
+    Filtr qanday qaror chiqarganini tahlil qiluvchi diagnostik funksiya.
+    Admin uchun test vositasida ishlatiladi.
+    """
+    full_text = f"{title} {content}"
+    cleaned = clean_text(full_text)
+
+    # 1. Soxta so'zlar
+    for excl in EXCLUSION_WORDS:
+        if excl in cleaned:
+            has_real_metro = any(re.search(pat, cleaned) for pat in METRO_EXPLICIT_PATTERNS)
+            if not has_real_metro:
+                return {
+                    "is_metro": False,
+                    "tags": [],
+                    "reason": f"Soxta metro so'zi aniqlandi: '{excl}' (metrologiya, santimetr va h.k.)",
+                    "matched": [excl]
+                }
+
+    # 2. Ko'chmas mulk
+    for pat in REAL_ESTATE_PATTERNS:
+        m = re.search(pat, cleaned)
+        if m:
+            return {
+                "is_metro": False,
+                "tags": [],
+                "reason": f"Ko'chmas mulk / Uy-joy reklamasi deb topildi ('{m.group(0)[:60]}...')",
+                "matched": [m.group(0)]
+            }
+
+    # 3. Sport masofasi
+    for pat in SPORTS_DISTANCE_PATTERNS:
+        m = re.search(pat, cleaned)
+        if m:
+            has_strong_metro = any(sig in cleaned for sig in STRONG_METRO_SIGNALS)
+            if not has_strong_metro:
+                return {
+                    "is_metro": False,
+                    "tags": [],
+                    "reason": f"Sport/masofa metri deb topildi ('{m.group(0)[:60]}...')",
+                    "matched": [m.group(0)]
+                }
+
+    # 4. Chet el metrosi
+    is_foreign = any(clue in cleaned for clue in FOREIGN_METRO_CLUES)
+    is_local = any(loc in cleaned for loc in ["toshkent", "тошкент", "tashkent", "o'zbekiston", "ўзбекистон", "узбекистан", "пойтахт"])
+    if is_foreign and not is_local:
+        foreign_match = [c for c in FOREIGN_METRO_CLUES if c in cleaned]
+        return {
+            "is_metro": False,
+            "tags": [],
+            "reason": f"Chet el metrosi aniqlandi ({', '.join(foreign_match)}), Toshkent ko'rsatilmagan",
+            "matched": foreign_match
+        }
+
+    is_metro, tags = is_metro_related(title, content)
+    matched_clues = []
+    for pat in METRO_EXPLICIT_PATTERNS:
+        m = re.search(pat, cleaned)
+        if m:
+            matched_clues.append(f"Qat'iy pattern: {m.group(0)}")
+            break
+    for st in SPECIFIC_STATIONS:
+        if st in cleaned:
+            matched_clues.append(f"Bekat: {st}")
+            break
+    for line in METRO_LINES:
+        if line in cleaned:
+            matched_clues.append(f"Liniya: {line}")
+            break
+    for kw in _custom_keywords_cache:
+        if kw in cleaned:
+            matched_clues.append(f"Maxsus kalit so'z: {kw}")
+            break
+
+    if is_metro:
+        return {
+            "is_metro": True,
+            "tags": tags,
+            "reason": "Toshkent metrosiga oid haqiqiy xabar deb tasdiqlandi!",
+            "matched": matched_clues
+        }
+    else:
+        return {
+            "is_metro": False,
+            "tags": [],
+            "reason": "Metro, bekat yoki metropoliten bilan bog'liq kalit so'z topilmadi.",
+            "matched": []
+        }
+

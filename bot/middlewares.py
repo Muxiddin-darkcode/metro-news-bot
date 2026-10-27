@@ -16,6 +16,15 @@ class AdminOnlyMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
+        from aiogram.types import CallbackQuery
+
+        if isinstance(event, CallbackQuery):
+            user_id = event.from_user.id if event.from_user else None
+            if user_id and user_id in settings.admin_id_list:
+                return await handler(event, data)
+            await event.answer("⛔ Faqat tayinlangan adminlar uchun!", show_alert=True)
+            return None
+
         if isinstance(event, Message):
             chat = event.chat
             user_id = event.from_user.id if event.from_user else None
@@ -46,4 +55,5 @@ class AdminOnlyMiddleware(BaseMiddleware):
             return None
 
         return await handler(event, data)
+
 

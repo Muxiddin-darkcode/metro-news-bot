@@ -187,4 +187,22 @@ class CrossSourceDeduplicator:
         ]
         self._save()
 
+    def get_recent_events(self, limit: int = 10) -> List[Dict]:
+        """Oxirgi qayd etilgan metro hodisalari ro'yxatini qaytaradi."""
+        return list(reversed(self._history))[:limit]
+
+    def clear_history(self) -> int:
+        """Antidublikat xotirasini tozalash."""
+        count = len(self._history)
+        self._history.clear()
+        self._save()
+        logger.info(f"Antidublikat xotirasi tozalandi ({count} ta voqea o'chirildi).")
+        return count
+
+    def set_threshold(self, threshold: float) -> None:
+        """Dublikat o'xshashlik chegarasini dinamik o'zgartirish."""
+        self.threshold = max(0.1, min(1.0, threshold))
+        logger.info(f"Antidublikat chegarasi {self.threshold} ga o'zgartirildi.")
+
 deduplicator = CrossSourceDeduplicator()
+

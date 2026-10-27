@@ -58,11 +58,17 @@ async def fetch_telegram_channel(
             title = lines[0][:150] if lines else f"Telegram xabari (@{clean_username})"
             content = "\n".join(lines[1:]) if len(lines) > 1 else text
 
+            # Manba nomini chiroyli formatlash
+            if not channel_name or channel_name.strip().lstrip("@").lower() == clean_username.lower():
+                display_name = f"Telegram / @{clean_username}"
+            else:
+                display_name = f"Telegram / {channel_name} (@{clean_username})"
+
             item = NewsItem(
                 title=title,
                 content=content,
                 url=post_url,
-                source_name=f"Telegram / @{clean_username} ({channel_name})",
+                source_name=display_name,
                 source_type="telegram",
                 raw_id=post_id or post_url,
                 published_at=published_at

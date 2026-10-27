@@ -15,27 +15,14 @@ from bot.middlewares import AdminOnlyMiddleware
 from bot.handlers import router as admin_router
 from bot.notifier import send_metro_alert
 
-import collections
-
-log_buffer = collections.deque(maxlen=200)
-
-class BufferLogHandler(logging.Handler):
-    def emit(self, record):
-        try:
-            log_buffer.append(self.format(record))
-        except Exception:
-            pass
-
-_buf_handler = BufferLogHandler()
-_buf_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
-logging.getLogger().addHandler(_buf_handler)
+from config import settings, logger, log_buffer
 
 health_runner = None
 
 async def monitor_background_loop(bot: Bot):
     """
     24/7 orqa fonda ishlovchi asinxron kuzatuvchi.
-    Har CHECK_INTERVAL_SECONDS (masalan 60s) vaqtda barcha 80 ta manbani
+    Har CHECK_INTERVAL_SECONDS (masalan 60s) vaqtda barcha manbalarni
     tekshirib, yangi metro xabarlarini darhol adminlar va guruhga yetkazadi.
     """
     logger.info("Asinxron monitoring tsikli ishga tushirildi...")
@@ -43,6 +30,11 @@ async def monitor_background_loop(bot: Bot):
 
     while True:
         try:
+            if getattr(source_manager, "is_paused", False):
+                logger.info("Monitoring vaqtincha to'xtatilgan (Paused). Keyingi tekshiruvgacha kutilmoqda...")
+                await asyncio.sleep(settings.CHECK_INTERVAL_SECONDS)
+                continue
+
             logger.info("Manbalar bo'yicha navbatdagi tekshiruv boshlanmoqda...")
             new_alerts, stats = await source_manager.scan_all_sources()
 
@@ -60,6 +52,7 @@ async def monitor_background_loop(bot: Bot):
             logger.error(f"Monitoring tsiklida kutilmagan xatolik: {e}", exc_info=True)
 
         await asyncio.sleep(settings.CHECK_INTERVAL_SECONDS)
+
 
 async def start_health_server():
     """Render va boshqa bulutli serverlar uchun bepul HTTP port eshituvchisi va holat/log tekshiruvi."""
@@ -150,9 +143,12 @@ async def run_bot():
     bot = Bot(token=token)
     dp = Dispatcher()
 
-    # Xavfsizlik: Begonalarni cheklovchi middleware
-    dp.message.middleware(AdminOnlyMiddleware())
+    # Xavfsizlik: Begonalarni cheklovchi middleware (Xabarlar va Callback tugmalar uchun)
+    admin_middleware = AdminOnlyMiddleware()
+    dp.message.middleware(admin_middleware)
+    dp.callback_query.middleware(admin_middleware)
     dp.include_router(admin_router)
+
 
     # Avvalgi webhook va qolib ketgan xabarlarni tozalash (polling xatosiz boshlanishi uchun)
     try:

@@ -102,13 +102,35 @@ class UzFormatter(logging.Formatter):
             return dt.strftime(datefmt)
         return dt.strftime("%Y-%m-%d %H:%M:%S")
 
+import collections
+
+log_buffer = collections.deque(maxlen=300)
+
+class BufferLogHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            log_buffer.append(self.format(record))
+        except Exception:
+            pass
+
+_buf_handler = BufferLogHandler()
+_buf_handler.setFormatter(UzFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+
 # Configure standardized logging with Uzbekistan Time
 _log_handler = logging.StreamHandler()
 _log_handler.setFormatter(UzFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
 
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[_log_handler]
+    handlers=[_log_handler, _buf_handler]
 )
 logger = logging.getLogger("MetroMonitor")
+
+def get_recent_logs(lines: int = 25) -> str:
+    """Oxirgi tizim loglarini matn ko'rinishida olish."""
+    if not log_buffer:
+        return "Hozircha tizim loglari mavjud emas."
+    selected = list(log_buffer)[-lines:]
+    return "\n".join(selected)
+
 

@@ -47,10 +47,10 @@ def format_alert_message(item: NewsItem) -> str:
 
     return msg
 
-async def send_metro_alert(bot: Bot, item: NewsItem) -> int:
+async def send_metro_alert(bot: Bot, item: NewsItem, chat_ids: list = None) -> int:
     """
-    Aniqlangan metro xabarini faqat belgilangan 2 ta adminga jo'natadi.
-    Muvaffaqiyatli yetkazilgan adminlar sonini qaytaradi.
+    Aniqlangan metro xabarini belgilangan chat(lar)ga jo'natadi.
+    Muvaffaqiyatli yetkazilgan xabarlar sonini qaytaradi.
     """
     text = format_alert_message(item)
     
@@ -79,10 +79,11 @@ async def send_metro_alert(bot: Bot, item: NewsItem) -> int:
         ]
     )
 
-    target_chats = settings.target_chat_ids
+    targets = chat_ids if chat_ids is not None else settings.target_chat_ids
     successful_deliveries = 0
 
-    for chat_id in target_chats:
+
+    for chat_id in targets:
         try:
             await bot.send_message(
                 chat_id=chat_id,

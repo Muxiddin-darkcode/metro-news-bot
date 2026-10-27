@@ -93,15 +93,24 @@ Bot ishga tushishi bilanoq:
 
 ---
 
-## 🎮 Admin Buyruqlari
+## 🎮 Kengaytirilgan Admin Imkoniyatlari va Buyruqlari
 
-Adminlar Telegram orqali botga quyidagi komandalarni berishi mumkin:
-- `/start` — Tizim bilan tanishuv va tezkor klaviatura;
-- `/status` — Tizim holati (oxirgi tekshiruv vaqti, qancha soniya ketgani, keshdagi xabarlar soni);
-- `/check` — 80 ta manbani navbatdan tashqari darhol tekshirish;
+Adminlar Telegram orqali zamonaviy **Inline Dashboard** va qulay Reply klaviatura yordamida quyidagi buyruqlardan foydalanishi mumkin:
+
+- `/panel` (yoki `/admin`, `🎛️ Boshqaruv paneli`) — Asosiy interaktiv admin boshqaruv paneli (Dashboard);
+- `/start` — Tizim bilan tanishuv, asosiy menyu va tezkor klaviatura;
+- `/status` — Tizim holati (monitoring holati, tekshiruv vaqti, kesh va antidublikat statistikasi);
+- `/check` — Barcha manbalarni navbatdan tashqari parallel tekshirish va yangi xabarlarni darhol jo'natish;
+- `/sources` — Manbalar boshqaruvi (Telegram kanallarni va saytlarni sahifalab ko'rish, yangi kanal qo'shish, o'chirish va bittalab testlash);
+- `/keywords` — Filtr kalit so'zlari hamda yangi maxsus metro kalit so'zlarini qo'shish/o'chirish;
+- `/history` (yoki `/news`, `📰 So'nggi xabarlar`) — Oxirgi 24 soatda aniqlangan yangi metro hodisalari ro'yxati;
+- `/logs` (`📋 So'nggi loglar`) — Botning so'nggi jonli loglarini Telegram orqali ko'rish va yangilab turish;
+- `/settings` (`⚙️ Sozlamalar`) — Monitoringni vaqtincha to'xtatish (Pause/Resume), tekshirish oralig'ini (30s, 60s, 120s, 300s) va dublikat sezgirligini (0.50, 0.65, 0.75, 0.85) to'g'ridan-to'g'ri sozlash;
+- `/ping` (yoki `/diag`) — Telegram API kechikishi (ping), server vaqti (UTC+5) va diagnostika ma'lumotlari;
+- `/test_alert` — Namuna tariqasida haqiqiy ko'rinishdagi test metro xabarnomasini jo'natish;
 - `/id` — Chat yoki Guruh ID sini aniqlash (guruhga qo'shib /id yozilsa, uning ID sini beradi);
-- `/sources` — Hozirda kuzatilayotgan 40 ta kanal va 40 ta sayt ro'yxati;
-- `/keywords` — Hozirgi filtr kalit so'zlari.
+- **Keshni tozalash** — Keshdagi ko'rilgan xabarlar yoki antidublikat izlarini xavfsiz tozalash.
+
 
 
 ---

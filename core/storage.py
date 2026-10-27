@@ -59,4 +59,13 @@ class StorageManager:
     def count(self) -> int:
         return len(self._seen_urls)
 
+    def clear(self) -> int:
+        """Keshdagi barcha ko'rilgan xabarlar tarixini tozalash."""
+        cleared_count = len(self._seen_urls)
+        self._seen_urls.clear()
+        self._save()
+        logger.info(f"Storage keshi tozalandi ({cleared_count} ta element o'chirildi).")
+        return cleared_count
+
 storage = StorageManager()
+

@@ -109,6 +109,93 @@ class TestStrictMetroMonitoring(unittest.TestCase):
         s_empty = Settings(ADMIN_IDS="111,222", GROUP_ID="")
         self.assertEqual(s_empty.target_chat_ids, [111, 222])
 
+    def test_custom_keywords_and_explain_filter(self):
+        from core.filter import (
+            add_custom_keyword,
+            remove_custom_keyword,
+            get_custom_keywords,
+            explain_filter,
+            is_metro_related
+        )
+        test_kw = "yangi toshkent bekati"
+        add_custom_keyword(test_kw)
+        self.assertIn(test_kw, get_custom_keywords())
+
+        # Test filter detection with custom keyword
+        title = "Yangi Toshkent bekatida ta'mirlash ishlari boshlandi"
+        is_rel, tags = is_metro_related(title, "")
+        self.assertTrue(is_rel)
+
+        # Test explain_filter
+        res = explain_filter(title, "")
+        self.assertTrue(res["is_metro"])
+        self.assertTrue(any("Maxsus kalit so'z" in m for m in res["matched"]))
+
+        # Cleanup
+        remove_custom_keyword(test_kw)
+        self.assertNotIn(test_kw, get_custom_keywords())
+
+    def test_storage_and_deduplicator_cache_control(self):
+        from core.storage import storage
+        from core.deduplicator import deduplicator
+
+        storage.mark_seen("http://test.url/1")
+        self.assertGreater(storage.count, 0)
+        c = storage.clear()
+        self.assertGreaterEqual(c, 1)
+        self.assertEqual(storage.count, 0)
+
+        # Deduplicator threshold & history
+        deduplicator.set_threshold(0.75)
+        self.assertEqual(deduplicator.threshold, 0.75)
+        deduplicator.register_event("Test Metro Sarlavhasi", "Detallar", "Test Manba", "http://test.url/2")
+        self.assertGreater(len(deduplicator.get_recent_events()), 0)
+        c2 = deduplicator.clear_history()
+        self.assertGreaterEqual(c2, 1)
+        self.assertEqual(len(deduplicator.get_recent_events()), 0)
+
+    def test_source_manager_admin_features(self):
+        from parsers.manager import SourceManager
+        import tempfile
+        import json
+
+        with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json", encoding="utf-8") as f:
+            json.dump({"telegram_channels": [{"username": "initial_channel", "name": "Init"}], "web_sources": []}, f)
+            temp_path = Path(f.name)
+
+        mgr = SourceManager(sources_file=temp_path)
+        # Test pause/resume
+        self.assertFalse(mgr.is_paused)
+        mgr.pause()
+        self.assertTrue(mgr.is_paused)
+        mgr.resume()
+        self.assertFalse(mgr.is_paused)
+        mgr.toggle_pause()
+        self.assertTrue(mgr.is_paused)
+
+        # Test add/remove telegram
+        ok, _ = mgr.add_telegram_channel("test_channel_123", name="Test Channel")
+        self.assertTrue(ok)
+        self.assertTrue(any(c["username"] == "test_channel_123" for c in mgr.telegram_channels))
+
+        # Test remove telegram
+        ok2, _ = mgr.remove_telegram_channel("test_channel_123")
+        self.assertTrue(ok2)
+        self.assertFalse(any(c["username"] == "test_channel_123" for c in mgr.telegram_channels))
+
+        # Test add/remove web source
+        ok_w, _ = mgr.add_web_source("Test Sayt", "https://test.uz", "https://test.uz/rss")
+        self.assertTrue(ok_w)
+        self.assertTrue(any(w["name"] == "Test Sayt" for w in mgr.web_sources))
+
+        ok_w2, _ = mgr.remove_web_source("Test Sayt")
+        self.assertTrue(ok_w2)
+        self.assertFalse(any(w["name"] == "Test Sayt" for w in mgr.web_sources))
+
+        if temp_path.exists():
+            temp_path.unlink()
+
 if __name__ == "__main__":
     unittest.main()
+
 

@@ -199,6 +199,33 @@ class TestStrictMetroMonitoring(unittest.TestCase):
         if temp_path.exists():
             temp_path.unlink()
 
+    def test_ai_analyzer_and_transliteration(self):
+        from core.ai_analyzer import cyrillic_to_latin, contains_cyrillic, normalize_model_name, ai_analyzer
+        from parsers.base import NewsItem
+
+        # Test Cyrillic detection
+        self.assertTrue(contains_cyrillic("Метро хабари"))
+        self.assertFalse(contains_cyrillic("Metro xabari"))
+
+        # Test Transliteration
+        lat = cyrillic_to_latin("Метро Ташкента")
+        self.assertEqual(lat, "Metro Tashkenta")
+
+        # Test model normalizer
+        self.assertEqual(normalize_model_name("llama-3.3-70b-versatile", ""), "meta-llama/llama-3.3-70b-instruct")
+        self.assertEqual(normalize_model_name("gemini-3.5-flash-lite", "gemini-1.5-flash"), "gemini-1.5-flash")
+
+        # Test Fallback guarantees Latin output
+        item = NewsItem(
+            title="Метрода янги поездлар ҳаракати бошланди",
+            content="Тошкент метросида янги замонавий таркиблар синовдан ўтказилмоқда.",
+            source_name="Spot.uz",
+            url="https://spot.uz/1"
+        )
+        fallback = ai_analyzer._build_fallback_result(item)
+        self.assertFalse(contains_cyrillic(fallback.title), "Fallback sarlavhasida krill harflari qolmasligi shart!")
+        self.assertFalse(contains_cyrillic(fallback.summary), "Fallback xulosasida krill harflari qolmasligi shart!")
+
 if __name__ == "__main__":
     unittest.main()
 

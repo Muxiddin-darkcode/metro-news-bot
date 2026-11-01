@@ -4,6 +4,7 @@ Toshkent Metropoliteni yangiliklarini professional transport tahlilchisi sifatid
 o'rganib, yo'lovchilar uchun eng aniq, xolis, lo'nda va chiroyli matn tayyorlaydi.
 """
 
+import os
 import re
 import json
 import html
@@ -74,46 +75,126 @@ def safe_truncate_words(text: str, max_len: int) -> str:
     return truncated.rstrip(" ,;:-—") + "."
 
 
-METRO_AI_SYSTEM_PROMPT = """Sen O'zbekiston Respublikasi va Toshkent Metropoliteni bo'yicha Yetakchi Transport Analitigi va Bosh Muharrirsan.
-Sening vazifang - turli manbalardan (Telegram kanallar, rasmiy idoralar va OAVlar) olingan metro xabarlarini chuqur tahlil qilib, Toshkent metrosi yo'lovchilari uchun professional, lo'nda, qisqa, ishonchli va eng yuqori PRO darajadagi operativ xulosa tayyorlash.
+CYRILLIC_TO_LATIN_MAP = {
+    'А': 'A', 'а': 'a',
+    'Б': 'B', 'б': 'b',
+    'В': 'V', 'в': 'v',
+    'Г': 'G', 'г': 'g',
+    'Д': 'D', 'д': 'd',
+    'Ё': 'Yo', 'ё': 'yo',
+    'Ж': 'J', 'ж': 'j',
+    'З': 'Z', 'з': 'z',
+    'И': 'I', 'и': 'i',
+    'Й': 'Y', 'й': 'y',
+    'К': 'K', 'к': 'k',
+    'Л': 'L', 'л': 'l',
+    'М': 'M', 'м': 'm',
+    'Н': 'N', 'н': 'n',
+    'О': 'O', 'о': 'o',
+    'П': 'P', 'п': 'p',
+    'Р': 'R', 'р': 'r',
+    'С': 'S', 'с': 's',
+    'Т': 'T', 'т': 't',
+    'У': 'U', 'у': 'u',
+    'Ф': 'F', 'ф': 'f',
+    'Х': 'X', 'х': 'x',
+    'Ц': 'Ts', 'ц': 'ts',
+    'Ч': 'Ch', 'ч': 'ch',
+    'Ш': 'Sh', 'ш': 'sh',
+    'Щ': 'Sh', 'щ': 'sh',
+    'Ъ': "'", 'ъ': "'",
+    'Ы': 'I', 'ы': 'i',
+    'Ь': '', 'ь': '',
+    'Э': 'E', 'э': 'e',
+    'Ю': 'Yu', 'ю': 'yu',
+    'Я': 'Ya', 'я': 'ya',
+    'Ў': "O'", 'ў': "o'",
+    'Ғ': "G'", 'ғ': "g'",
+    'Қ': 'Q', 'қ': 'q',
+    'Ҳ': 'H', 'ҳ': 'h',
+}
 
-TAHRIRIY STANDARTLAR VA QOIDALAR (PRO LEVEL):
-1. TIL VA USLUB:
-   - Xulosa FAQAT mukammal, savodli O'zbek Lotin imlosida taqdim etilsin (o', g', sh, ch harflari toza yozilsin).
-   - Matn qisqa, lo'nda, jiddiy va aniq bo'lsin. Hech qanday suv so'zlar ("Ma'lum qilinishicha", "Ushbu xabarda aytilishicha") ISHLATILMASIN! To'g'ridan-to'g'ri faktga o'tilsin.
-2. FAKTIK ANIKLIK VA XOLISLIK:
-   - Faqat keltirilgan matndagi faktlarga tayan. Hech narsani o'zingdan to'qima.
-   - Reklama, obuna bo'lish chaqiriqlari va bot havolalarini 100% tozalab tashla.
-3. TOIFALAR VA BADGELAR:
-   - EMERGENCY: Harakat to'xtashi, falokat, texnik nosozlik, bekat yopilishi.
-     Badge: "🔴 SHOSHILINCH: HARAKAT TO'XTATILDI"
-   - WARNING: Rejali ta'mirlash, qisman cheklov, oraliq cho'zilishi.
-     Badge: "🟡 DIQQAT: HARAKAT GRAFIGI O'ZGARISHI"
-   - NEWS: Yangi vagonlar, yangi bekatlar, infratuzilma yangilanishi, yangi qulayliklar.
-     Badge: "🟢 YANGILIK VA RIVOJLANISH"
-   - INFO: Yo'l haqi, to'lov tizimlari, rasmiy bayonotlar, raddiyalar.
-     Badge: "ℹ️ RASMIY AXBOROT"
 
-4. TALAB ETILADIGAN MAYDONLAR (IXCHAM, LO'NDA VA TO'LIQ):
-   - clean_title: Qisqa, jarangdor faktik sarlavha (maksimal 50 belgi).
-   - quick_summary: 1–2 ta lo'nda jumla (maksimal 180 belgi). Voqea mohiyati va sababi qisqa ochib berilsin.
-   - station_and_line: Faqat aniq metro bekati yoki liniyasi bo'lsa yoz (agar umumiy yoki shahar miqyosida bo'lsa bo'sh qoldir "").
-   - incident_status: Qisqa harakat holati (maksimal 50 belgi).
-   - passenger_impact: Yo'lovchiga daxldor 1-2 ta qisqa nuqta.
-   - practical_advice: 1 ta qisqa, to'liq va tugallangan amaliy tavsiya (maksimal 70 belgi). Hech qachon chala yoki yarim jumla bo'lmasin!
+def contains_cyrillic(text: str) -> bool:
+    """Matnda krill harflari bor-yo'qligini tekshirish."""
+    return bool(re.search(r'[а-яА-ЯёЁўЎқҚғҒҳҲ]', text))
 
-JAVOBNI FAQAT QUYIDAGI JSON FORMATIDA QAYTAR (boshqa hech qanday so'zsiz):
+
+def cyrillic_to_latin(text: str) -> str:
+    """Krill yozuvidagi matnni O'zbek lotin alifbosiga o'girish."""
+    if not text:
+        return ""
+    vowels = "АЕЁИОУЭЮЯаеёиоуэюяЎўAEIOUaeiou"
+    res = []
+    prev_char = ' '
+    for ch in text:
+        if ch == 'Е':
+            if prev_char in vowels or not prev_char.isalnum():
+                res.append('Ye')
+            else:
+                res.append('E')
+        elif ch == 'е':
+            if prev_char in vowels or not prev_char.isalnum():
+                res.append('ye')
+            else:
+                res.append('e')
+        elif ch in CYRILLIC_TO_LATIN_MAP:
+            res.append(CYRILLIC_TO_LATIN_MAP[ch])
+        else:
+            res.append(ch)
+        prev_char = ch
+    return "".join(res)
+
+
+def normalize_model_name(model: str, default_model: str) -> str:
+    """Model nomlarini OpenRouter va Gemini talablariga moslashtirish."""
+    m = model.strip() if model else ""
+    if not m:
+        return default_model
+    # Llama 3.3 70B variantlari (llama-3.3-70b-versatile, llama-3.3-70b va h.k.)
+    if "llama-3.3-70b" in m.lower():
+        if "meta-llama/" not in m.lower():
+            return "meta-llama/llama-3.3-70b-instruct"
+    # Eskirgan yoki mavjud bo'lmagan Gemini modellari
+    if "gemini" in m.lower() and ("3.5" in m.lower() or "2.0-flash-exp" in m.lower()):
+        return "gemini-1.5-flash"
+    return m
+
+
+METRO_AI_SYSTEM_PROMPT = """Sen Toshkent Metropoliteni bo'yicha Yetakchi Transport Analitikisisan.
+Sening vazifang - har qanday manbadan (Telegram kanallar, OAV, rasmiy xabarlar) olingan metro yangiliklarini tahlil qilib, yo'lovchilar uchun operativ, professional, ixcham va faqat faktlarga asoslangan qisqa xulosa tayyorlash.
+
+ENG MUHIM QAT'IY TALABLAR (PRO LEVEL):
+1. TIL VA ALIFBO (100% O'ZBEK LOTIN):
+   - Kiruvchi xabar qaysi tilda (Ruscha, Krillcha, Inglizcha) bo'lishidan qat'i nazar, barcha chiqariladigan matnlar (sarlavha, tahlil, holat, tavsiya) FAQAT VA FAQAT O'ZBEK LOTIN ALIFBOSIDA bo'lishi SHART!
+   - Biron bir ruscha yoki krillcha so'zni aslicha qoldirma. Barchasini toza, adabiy o'zbek lotin tiliga tarjima qil.
+2. TEJAMKORLIK VA LO'NDALIK (COIN TEJASH):
+   - Keraksiz kirish so'zlarni ("Ma'lum qilinishicha", "Ushbu xabarda aytilishicha") aslo ishlatma. Faqat fakt va mohiyat!
+   - clean_title: Qisqa, jarangdor faktik sarlavha (maksimal 50 belgi, O'zbek lotincha).
+   - quick_summary: 1-2 ta ixcham jumla, maksimal 180 belgi. Asosiy mohiyat va sabab (O'zbek lotincha).
+   - incident_status: Qisqa harakat holati (maksimal 45 belgi, O'zbek lotincha).
+   - passenger_impact: Yo'lovchiga daxldor 1 ta qisqa fakt (O'zbek lotincha).
+   - practical_advice: 1 ta qisqa va to'liq amaliy tavsiya (maksimal 65 belgi, O'zbek lotincha).
+3. FAKTIK ANIKLIK:
+   - Faqat keltirilgan matnga tayan, yangi fakt to'qima. Reklama va kanal havolalarini 100% tozalab tashla.
+4. TOIFALAR VA BADGELAR:
+   - EMERGENCY: "🔴 SHOSHILINCH: HARAKAT TO'XTATILDI" (to'xtash, avariya, nosozlik)
+   - WARNING: "🟡 DIQQAT: HARAKAT GRAFIGI O'ZGARISHI" (kechikish, oraliq cho'zilishi, ta'mirlash)
+   - NEWS: "🟢 YANGILIK VA RIVOJLANISH" (yangi poyezdlar, yangi bekatlar, qulayliklar)
+   - INFO: "ℹ️ RASMIY AXBOROT" (raddiya, rasmiy bayonot, to'lov tartibi)
+
+FAQAT QUYIDAGI JSON FORMATIDA JAVOB BER (boshqa hech narsa yozma):
 {
   "category": "EMERGENCY | WARNING | NEWS | INFO",
   "badge": "Yuqoridagi badgelardan biri",
-  "clean_title": "Professional qisqa sarlavha",
-  "quick_summary": "1-2 jumlali lo'nda xulosa",
-  "station_and_line": "Aniq bekat/liniya yoki bo'sh",
-  "incident_status": "Qisqa holat",
+  "clean_title": "O'zbek lotincha qisqa sarlavha",
+  "quick_summary": "1-2 jumlali o'zbek lotincha qisqa tahlil",
+  "station_and_line": "Bekat/liniya nomi yoki bo'sh",
+  "incident_status": "O'zbek lotincha qisqa holat",
   "passenger_impact": [
-    "Qisqa fakt"
+    "Qisqa ta'sir"
   ],
-  "practical_advice": "Qisqa to'liq tavsiya"
+  "practical_advice": "Qisqa amaliy tavsiya"
 }
 """
 
@@ -121,34 +202,9 @@ FEW_SHOT_EXAMPLES = [
     {
         "role": "user",
         "content": (
-            "Manba: @daryo\n"
-            "Sarlavha: На Чиланзарской линии метро временно остановились поезда\n"
-            "Matn: Сегодня в 14:20 на станции 'Новза' Чиланзарской линии из-за технической неисправности состава остановилось движение. "
-            "Специалисты устранили проблему за 15 минут, сейчас поезда курсируют в штатном режиме. Пассажиров просят соблюдать спокойствие. Подписывайтесь на наш канал!"
-        )
-    },
-    {
-        "role": "assistant",
-        "content": json.dumps({
-            "category": "WARNING",
-            "badge": "🟡 DIQQAT: HARAKAT GRAFIGI O'ZGARISHI",
-            "clean_title": "Chilonzor yo'lida poyezdlar harakati qayta tiklandi",
-            "quick_summary": "'Novza' bekatida poyezdda yuzaga kelgan texnik nosozlik sababli harakat 15 daqiqaga to'xtab qoldi. Mutaxassislar muammoni tezkor bartaraf etib, poyezdlar qatnovini odatiy grafik bo'yicha qayta yo'lga qo'ydi.",
-            "station_and_line": "Chilonzor yo'li ('Novza' bekati)",
-            "incident_status": "✅ Nosozlik bartaraf etildi, poyezdlar odatiy jadvalda harakatlanmoqda",
-            "passenger_impact": [
-                "Harakat to'xtalishi: 15 daqiqa davom etdi va to'liq bartaraf etildi",
-                "Xavfsizlik: Yo'lovchilarga zarar yetmagan, liniyada harakat xavfsizligi to'liq ta'minlangan"
-            ],
-            "practical_advice": "Liniyada harakat tiklangan, ammo oraliq intervallar to'liq barqarorlashguncha qisqa siljishlarni inobatga olish tavsiya etiladi."
-        }, ensure_ascii=False)
-    },
-    {
-        "role": "user",
-        "content": (
-            "Manba: Toshkent Metropoliteni Rasmiy\n"
-            "Sarlavha: 5 вагонли поездлар ҳақидаги хабарларга раддия\n"
-            "Matn: Ижтимоий тармоқларда 20-ноябрдан бошлаб метрополитенда 5 вагонли поездлар йўлга қўйилиши ҳақида тарқалган хабарлар ҳақиқатга тўғри келмайди. 54 та таркибни босқичма-босқич модернизация қилиш 2027-йил сентабригача режалаштирилган. Ҳозирда тиғиз вақтларда интервалларни 2-3 дақиқагача тушириш устида ишланмоқда."
+            "Manba: Spot.uz\n"
+            "Sarlavha: Метро Ташкента планирует расширить 80% поездов до пяти вагонов\n"
+            "Matn: Пресс-служба столичной подземки прокомментировала информацию о добавлении вагонов в составы. В компании опровергли слухи из соцсетей о якобы планируемом запуске пятивагонных составов с 20 ноября. Модернизация 54 составов пройдет поэтапно до осени 2027 года."
         )
     },
     {
@@ -156,39 +212,37 @@ FEW_SHOT_EXAMPLES = [
         "content": json.dumps({
             "category": "INFO",
             "badge": "ℹ️ RASMIY AXBOROT",
-            "clean_title": "5 vagonli poyezdlar haqidagi xabarlar rasman rad etildi",
-            "quick_summary": "Ijtimoiy tarmoqlarda 20-noyabrdan 5 vagonli poyezdlar qatnovi boshlanishi haqida tarqalgan xabarlar asossiz deb topildi. Metropoliten ma'muriyatiga ko'ra, harakat tarkiblarini to'liq modernizatsiya qilish 2027-yil sentabrigacha bosqichma-bosqich yakunlanadi.",
-            "station_and_line": "Butun metropoliten tarmog'i",
-            "incident_status": "ℹ️ Rasmiy raddiya berildi, poyezdlar mavjud jadval asosida harakatlanmoqda",
+            "clean_title": "5 vagonli poyezdlar haqidagi xabarlar rad etildi",
+            "quick_summary": "Metropoliten 20-noyabrdan 5 vagonli poyezdlar yurishi haqidagi mish-mishlarni rad etdi. 54 ta tarkibni 5 vagonli tizimga o'tkazish 2027-yil kuzigacha bosqichma-bosqich yakunlanadi.",
+            "station_and_line": "Toshkent metropoliteni",
+            "incident_status": "ℹ️ Rasmiy raddiya berildi, harakat odatiy rejimda",
             "passenger_impact": [
-                "Harakat jadvali: Tig'iz soatlarda oraliq intervallarni 2-3 daqiqagacha qisqartirish choralari ko'rilmoqda",
-                "Modernizatsiya: 54 ta tarkibni 5 vagonli tizimga o'tkazish rejasi 2027-yilgacha amalga oshiriladi"
+                "Harakat tarkiblarini kengaytirish 2027-yilgacha yakunlanadi"
             ],
-            "practical_advice": "Harakat grafigida hech qanday o'zgarish yo'q, faqat rasmiy 'Toshkent Metropoliteni' axborot xizmati xabarlariga tayanish tavsiya etiladi."
+            "practical_advice": "Poyezdlar amaldagi tasdiqlangan jadval asosida harakatlanmoqda."
         }, ensure_ascii=False)
     },
     {
         "role": "user",
         "content": (
-            "Manba: Toshkent Shahar Transport Boshqarmasi\n"
-            "Sarlavha: 20 та автобус йўналишининг иш вақти 23:00 гача узайтирилди\n"
-            "Matn: 1-декабрдан метро бекатлари, вокзаллар ва аэропортни боғловчи 20 та асосий автобус йўналишлари кечки соат 23:00 гача хизмат кўрсатади. Бу йўловчиларга кечки пайт метродан тушгач, уйларига етиб олишлари учун қулайлик яратади."
+            "Manba: Toshkent Metropoliteni Rasmiy\n"
+            "Sarlavha: Чилонзор йўлида ҳаракат вақтинча тўхтатилди\n"
+            "Matn: Новза бекатида техник носозлик сабабли поездлар 15 дақиқа тўхтаб қолди. Мутахассислар носозликни тезкор бартараф этиб, ҳаракатни тўлиқ тиклади."
         )
     },
     {
         "role": "assistant",
         "content": json.dumps({
-            "category": "NEWS",
-            "badge": "🟢 YANGILIK VA RIVOJLANISH",
-            "clean_title": "Metroni bog'lovchi 20 ta avtobus qatnovi 23:00 gacha uzaytirildi",
-            "quick_summary": "1-dekabrdan boshlab metro bekatlari va yirik transport uzellarini bog'lovchi 20 ta avtobus yo'nalishi soat 23:00 gacha harakatlanadi. Ushbu chora kechki soatlarda metro yo'lovchilarining uzluksiz harakatlanishiga xizmat qiladi.",
-            "station_and_line": "Asosiy tutashuv bekatlari",
-            "incident_status": "✅ 1-dekabrdan yangi uzaytirilgan tungi rejim amal qiladi",
+            "category": "WARNING",
+            "badge": "🟡 DIQQAT: HARAKAT GRAFIGI O'ZGARISHI",
+            "clean_title": "Chilonzor yo'lida poyezdlar harakati tiklandi",
+            "quick_summary": "'Novza' bekatida poyezddagi texnik nosozlik tufayli harakat 15 daqiqaga to'xtab qoldi. Mutaxassislar muammoni bartaraf etib, qatnovni odatiy rejimda tikladi.",
+            "station_and_line": "Chilonzor yo'li ('Novza' bekati)",
+            "incident_status": "✅ Nosozlik bartaraf etildi, qatnov tiklandi",
             "passenger_impact": [
-                "Tungi transport: Metro bekatlaridan kechki so'nggi poyezdlarda chiqqan yo'lovchilar uchun transport qulayligi yaratiladi",
-                "Qamrov hududi: Vokzallar, xalqaro aeroport va poytaxtning yirik turar joy massivlari o'rtasidagi aloqa ta'minlanadi"
+                "Harakat 15 daqiqa to'xtab, so'ng to'liq qayta tiklandi"
             ],
-            "practical_advice": "Kechki payt safar qilayotganda metro bilan birgalikda tutash avtobuslarning 23:00 gacha uzaytirilgan yangi jadvalidan foydalanishingiz mumkin."
+            "practical_advice": "Intervallar to'liq barqarorlashguncha qisqa kechikishlarni inobatga oling."
         }, ensure_ascii=False)
     }
 ]
@@ -305,18 +359,25 @@ class AIAnalyzer:
     """
 
     def __init__(self):
-        self.gemini_api_key = settings.GEMINI_API_KEY.strip()
-        self.gemini_model = settings.GEMINI_MODEL.strip() or "gemini-3.5-flash-lite"
-        self.openrouter_api_key = settings.OPENROUTER_API_KEY.strip()
-        self.openrouter_model = settings.OPENROUTER_MODEL.strip() or "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+        self.gemini_api_key = (settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY", "")).strip()
+        gem_m = (settings.GEMINI_MODEL or os.environ.get("GEMINI_MODEL", "")).strip()
+        self.gemini_model = normalize_model_name(gem_m, "gemini-1.5-flash")
+
+        self.openrouter_api_key = (settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY", "")).strip()
+        open_m = (settings.OPENROUTER_MODEL or os.environ.get("OPENROUTER_MODEL", "")).strip()
+        self.openrouter_model = normalize_model_name(open_m, "meta-llama/llama-3.3-70b-instruct")
+
         self.timeout = getattr(settings, "AI_TIMEOUT", 25.0)
 
     def reload_keys(self) -> None:
         """Sozlamalardan kalitlarni qayta yuklash."""
-        self.gemini_api_key = settings.GEMINI_API_KEY.strip()
-        self.gemini_model = settings.GEMINI_MODEL.strip() or "gemini-3.5-flash-lite"
-        self.openrouter_api_key = settings.OPENROUTER_API_KEY.strip()
-        self.openrouter_model = settings.OPENROUTER_MODEL.strip() or "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+        self.gemini_api_key = (settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY", "")).strip()
+        gem_m = (settings.GEMINI_MODEL or os.environ.get("GEMINI_MODEL", "")).strip()
+        self.gemini_model = normalize_model_name(gem_m, "gemini-1.5-flash")
+
+        self.openrouter_api_key = (settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY", "")).strip()
+        open_m = (settings.OPENROUTER_MODEL or os.environ.get("OPENROUTER_MODEL", "")).strip()
+        self.openrouter_model = normalize_model_name(open_m, "meta-llama/llama-3.3-70b-instruct")
 
     def get_status_info(self) -> Dict[str, Any]:
         """AI provayderlarining joriy holati."""
@@ -418,7 +479,7 @@ class AIAnalyzer:
             "contents": contents,
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 1000,
+                "maxOutputTokens": 600,
                 "responseMimeType": "application/json"
             }
         }
@@ -443,7 +504,7 @@ class AIAnalyzer:
             return self._parse_json_response(raw_text)
 
     async def _call_openrouter_api(self, user_prompt: str) -> Optional[AIAnalysisResult]:
-        """OpenRouter REST API orqali murojaat."""
+        """OpenRouter REST API orqali murojaat (Llama-3.3-70b-instruct)."""
         url = "https://openrouter.ai/api/v1/chat/completions"
 
         messages = [{"role": "system", "content": METRO_AI_SYSTEM_PROMPT}]
@@ -455,7 +516,7 @@ class AIAnalyzer:
             "model": self.openrouter_model,
             "messages": messages,
             "temperature": 0.2,
-            "max_tokens": 1500
+            "max_tokens": 500
         }
 
         headers = {
@@ -533,6 +594,26 @@ class AIAnalyzer:
             points = [str(points)]
         advice = str(data.get("practical_advice", "")).strip()
 
+        # Kafolatlangan 100% O'zbek Lotin imlosi (agar AI javobida krill harflari qolib ketgan bo'lsa)
+        if contains_cyrillic(title):
+            title = cyrillic_to_latin(title)
+        if contains_cyrillic(summary):
+            summary = cyrillic_to_latin(summary)
+        if contains_cyrillic(station):
+            station = cyrillic_to_latin(station)
+        if contains_cyrillic(status_line):
+            status_line = cyrillic_to_latin(status_line)
+        if contains_cyrillic(advice):
+            advice = cyrillic_to_latin(advice)
+
+        clean_points = []
+        for p in points:
+            p_str = str(p).strip()
+            if p_str:
+                if contains_cyrillic(p_str):
+                    p_str = cyrillic_to_latin(p_str)
+                clean_points.append(p_str)
+
         return AIAnalysisResult(
             success=True,
             category=category,
@@ -541,7 +622,7 @@ class AIAnalyzer:
             summary=summary,
             station_and_line=station,
             incident_status=status_line,
-            key_points=[str(p).strip() for p in points if str(p).strip()],
+            key_points=clean_points,
             advice=advice
         )
 
@@ -549,6 +630,7 @@ class AIAnalyzer:
         """
         AI mavjud bo'lmaganda yoki xatolik berganda
         asl matndan xavfsiz va toza formatlangan natija yaratish.
+        Krill yoki ruscha matnlar avtomatik ravishda O'zbek lotin alifbosiga o'tkaziladi.
         """
         clean_c = clean_raw_news_text(item.content)
         title = item.title.strip()
@@ -556,12 +638,19 @@ class AIAnalyzer:
         if clean_c == title or not clean_c:
             summary = title
         else:
-            summary = clean_c[:500] + ("..." if len(clean_c) > 500 else "")
+            summary = clean_c[:350] + ("..." if len(clean_c) > 350 else "")
+
+        # Krill yoki ruscha harflar bo'lsa, kafolatlangan lotin alifbosiga o'tkazish
+        if contains_cyrillic(title):
+            title = cyrillic_to_latin(title)
+        if contains_cyrillic(summary):
+            summary = cyrillic_to_latin(summary)
 
         badge = "🚇 RASMIY METRO XABARI"
-        if any(w in title.lower() for w in ["to'xtadi", "nosozlik", "kechikmoqda", "avariya", "остановилось"]):
+        title_lower = title.lower()
+        if any(w in title_lower for w in ["to'xtadi", "nosozlik", "kechikmoqda", "avariya", "toxtadi", "to'xtatildi"]):
             badge = "🟡 DIQQAT: HARAKAT O'ZGARISHI"
-        elif any(w in title.lower() for w in ["yangi", "ochildi", "zamonaviy", "qo'shildi", "новые"]):
+        elif any(w in title_lower for w in ["yangi", "ochildi", "zamonaviy", "qo'shildi"]):
             badge = "🟢 YANGILIK VA QULAYLIK"
 
         return AIAnalysisResult(

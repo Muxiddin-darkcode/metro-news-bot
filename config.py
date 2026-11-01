@@ -36,9 +36,9 @@ class Settings(BaseSettings):
     # AI Analyzer settings (Gemini + OpenRouter Fallback)
     AI_ENABLED: bool = True
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_MODEL: str = "gemini-1.5-flash"
     OPENROUTER_API_KEY: str = ""
-    OPENROUTER_MODEL: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+    OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct"
     AI_TIMEOUT: float = 25.0
 
     model_config = SettingsConfigDict(

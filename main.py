@@ -73,7 +73,8 @@ async def start_health_server():
     async def handle_logs(req):
         return web.Response(
             text="\n".join(log_buffer) if log_buffer else "Hali loglar yo'q.",
-            content_type="text/plain; charset=utf-8"
+            content_type="text/plain",
+            charset="utf-8"
         )
 
     async def handle_status(req):
@@ -85,7 +86,8 @@ async def start_health_server():
                 f"Jami yuboriladigan chatlar: {settings.target_chat_ids}\n"
                 f"Manbalar tekshiruvi: {source_manager.last_check_duration:.2f}s ketdi\n"
             ),
-            content_type="text/plain; charset=utf-8"
+            content_type="text/plain",
+            charset="utf-8"
         )
 
     app.router.add_get("/", handle_root)

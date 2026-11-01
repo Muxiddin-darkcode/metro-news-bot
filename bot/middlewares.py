@@ -47,7 +47,8 @@ class AdminOnlyMiddleware(BaseMiddleware):
 
             logger.warning(f"Ruxsatsiz kirishga urinish: User ID {user_id}")
             await event.answer(
-                "⛔ <b>Kirish cheklangan</b>\n\n"
+                f"⛔ <b>Kirish cheklangan</b>\n\n"
+                f"Sizning Telegram ID: <code>{user_id}</code>\n\n"
                 "Ushbu bot xizmati yopiq monitoring tizimi bo'lib, "
                 "faqatgina tayinlangan tizim administratoriga xizmat ko'rsatadi.",
                 parse_mode="HTML"

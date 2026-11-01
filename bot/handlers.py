@@ -196,8 +196,8 @@ def build_cache_text() -> str:
 # ASOSIY MENU HANDLERLARI (REPLY KEYBOARD)
 # =========================================================================
 
-@router.message(Command("close", "hide"))
-@router.message(F.text.in_(["❌ Panelni yopish", "Panelni yopish", "❌ Yopish", "Yopish"]) | F.text.contains("yopish") | F.text.contains("Yopish"))
+@router.message(StateFilter("*"), Command("close", "hide"))
+@router.message(StateFilter("*"), F.text.in_(["❌ Panelni yopish", "Panelni yopish", "❌ Yopish", "Yopish"]) | F.text.lower().contains("yopish"))
 async def cmd_close_panel(message: Message, state: FSMContext) -> None:
     """Boshqaruv panelini yig'ish (bitta ixcham tugma holatiga keltirish)."""
     await state.clear()
@@ -208,11 +208,9 @@ async def cmd_close_panel(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(Command("start", "menu", "panel", "dashboard"))
-@router.message(F.text == "◀️ Asosiy menyu")
-@router.message(F.text == "❌ Bekor qilish")
-@router.message(F.text.in_(["🎛 Panel", "🎛 Boshqaruv paneli", "Panel", "Boshqaruv", "🎛 Panelni ochish", "Panelni ochish"]))
-@router.message(Command("cancel"))
+@router.message(StateFilter("*"), Command("start", "menu", "panel", "dashboard", "cancel"))
+@router.message(StateFilter("*"), F.text.in_(["◀️ Asosiy menyu", "❌ Bekor qilish", "Bekor qilish", "Asosiy menyu"]))
+@router.message(StateFilter("*"), F.text.in_(["🎛 Panel", "🎛 Boshqaruv paneli", "Panel", "Boshqaruv", "🎛 Panelni ochish", "Panelni ochish"]) | F.text.lower().contains("ochish"))
 async def cmd_main_menu(message: Message, state: FSMContext) -> None:
     """Asosiy menyuga qaytish va FSM holatini bekor qilish."""
     await state.clear()
@@ -357,7 +355,7 @@ async def cmd_ai_menu(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(F.text.in_(["🔄 Tekshirish", "🔄 Provayderlarni tekshirish"]))
+@router.message(F.text.in_(["🔄 Aloqani tekshirish", "🔄 Tekshirish", "🔄 Provayderlarni tekshirish"]))
 async def cmd_ai_check_providers(message: Message) -> None:
     """AI provayderlarining aloqasini real tekshirish."""
     status_msg = await message.answer(
@@ -397,7 +395,7 @@ async def cmd_ai_check_providers(message: Message) -> None:
     await status_msg.edit_text(msg, parse_mode="HTML")
 
 
-@router.message(F.text.in_(["▶️ Yoqish", "▶️ AI ni yoqish", "⏸️ O'chirish", "⏸️ AI ni o'chirish"]))
+@router.message(F.text.in_(["▶️ AI ni yoqish", "⏸️ AI ni o'chirish", "▶️ Yoqish", "⏸️ O'chirish"]))
 async def cmd_ai_toggle(message: Message) -> None:
     """AI tahlilchini yoqish / o'chirish."""
     settings.AI_ENABLED = not settings.AI_ENABLED
@@ -617,7 +615,7 @@ async def process_add_web_feed(message: Message, state: FSMContext) -> None:
     await message.answer("Boshqaruv menyusi:", reply_markup=get_sources_reply_keyboard(tg_count, web_count))
 
 
-@router.message(F.text.in_(["🔍 Tekshirish", "🔍 Manbani tekshirish"]))
+@router.message(F.text.in_(["🔍 Manbani tekshirish", "🔍 Manba tekshirish"]))
 async def cmd_test_source_prompt(message: Message, state: FSMContext) -> None:
     """Manbani testlash uchun nom so'rash."""
     await state.set_state(AdminStates.waiting_for_test_source)
@@ -675,7 +673,7 @@ async def cmd_settings_menu(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(F.text.in_(["▶️ Yoqish", "▶️ Monitoringni yoqish", "⏸️ To'xtatish", "⏸️ Monitoringni to'xtatish"]))
+@router.message(F.text.in_(["▶️ Kuzatuvni yoqish", "⏸️ Kuzatuvni to'xtatish", "▶️ Monitoringni yoqish", "⏸️ Monitoringni to'xtatish"]))
 async def cmd_toggle_monitoring(message: Message) -> None:
     """Monitoringni to'xtatish yoki qayta yoqish."""
     is_paused = source_manager.toggle_pause()
@@ -774,7 +772,7 @@ async def process_add_keyword(message: Message, state: FSMContext) -> None:
         )
 
 
-@router.message(F.text.in_(["🔍 Tekshirish", "🔍 Matnni tekshirish"]))
+@router.message(F.text.in_(["🔍 Matnni tekshirish", "🔍 Matn tekshirish"]))
 async def cmd_test_text_start(message: Message, state: FSMContext) -> None:
     """Matnni filtrdan tekshirish so'rovi."""
     await state.set_state(AdminStates.waiting_for_test_text)

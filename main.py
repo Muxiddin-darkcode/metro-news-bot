@@ -63,22 +63,36 @@ async def start_health_server():
     global health_runner
     port = int(os.environ.get("PORT", 8080))
     app = web.Application()
-    app.router.add_get("/", lambda req: web.Response(text="🚇 Metro News Monitoring Bot is Running 24/7!"))
-    app.router.add_get("/health", lambda req: web.Response(text="OK"))
-    app.router.add_get("/logs", lambda req: web.Response(
-        text="\n".join(log_buffer) if log_buffer else "Hali loglar yo'q.",
-        content_type="text/plain; charset=utf-8"
-    ))
-    app.router.add_get("/status", lambda req: web.Response(
-        text=(
-            f"Bot Token bor: {bool(settings.BOT_TOKEN and 'YOUR' not in settings.BOT_TOKEN)}\n"
-            f"Adminlar: {settings.admin_id_list}\n"
-            f"Guruhlar: {settings.group_id_list}\n"
-            f"Jami yuboriladigan chatlar: {settings.target_chat_ids}\n"
-            f"Manbalar tekshiruvi: {source_manager.last_check_duration:.2f}s ketdi\n"
-        ),
-        content_type="text/plain; charset=utf-8"
-    ))
+
+    async def handle_root(req):
+        return web.Response(text="🚇 Metro News Monitoring Bot is Running 24/7!")
+
+    async def handle_health(req):
+        return web.Response(text="OK")
+
+    async def handle_logs(req):
+        return web.Response(
+            text="\n".join(log_buffer) if log_buffer else "Hali loglar yo'q.",
+            content_type="text/plain; charset=utf-8"
+        )
+
+    async def handle_status(req):
+        return web.Response(
+            text=(
+                f"Bot Token bor: {bool(settings.BOT_TOKEN and 'YOUR' not in settings.BOT_TOKEN)}\n"
+                f"Adminlar: {settings.admin_id_list}\n"
+                f"Guruhlar: {settings.group_id_list}\n"
+                f"Jami yuboriladigan chatlar: {settings.target_chat_ids}\n"
+                f"Manbalar tekshiruvi: {source_manager.last_check_duration:.2f}s ketdi\n"
+            ),
+            content_type="text/plain; charset=utf-8"
+        )
+
+    app.router.add_get("/", handle_root)
+    app.router.add_get("/health", handle_health)
+    app.router.add_get("/logs", handle_logs)
+    app.router.add_get("/status", handle_status)
+
     health_runner = web.AppRunner(app)
     await health_runner.setup()
     site = web.TCPSite(health_runner, "0.0.0.0", port)

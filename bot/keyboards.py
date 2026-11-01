@@ -55,11 +55,11 @@ def get_collapsed_keyboard() -> ReplyKeyboardMarkup:
 
 
 def get_settings_reply_keyboard(is_paused: bool = False) -> ReplyKeyboardMarkup:
-    """Sozlamalar Reply klaviaturasi (qisqa nomlar bilan)."""
+    """Sozlamalar Reply klaviaturasi (qisqa va unikal nomlar bilan)."""
     if is_paused:
-        toggle_btn = KeyboardButton(text="▶️ Yoqish", style="success")
+        toggle_btn = KeyboardButton(text="▶️ Kuzatuvni yoqish", style="success")
     else:
-        toggle_btn = KeyboardButton(text="⏸️ To'xtatish", style="danger")
+        toggle_btn = KeyboardButton(text="⏸️ Kuzatuvni to'xtatish", style="danger")
 
     kb = [
         [
@@ -83,7 +83,7 @@ def get_settings_reply_keyboard(is_paused: bool = False) -> ReplyKeyboardMarkup:
 
 
 def get_sources_reply_keyboard(tg_count: int = 0, web_count: int = 0) -> ReplyKeyboardMarkup:
-    """Manbalar Reply klaviaturasi (qisqa nomlar bilan)."""
+    """Manbalar Reply klaviaturasi (qisqa va unikal nomlar bilan)."""
     tg_label = f"📱 Telegram ({tg_count})" if tg_count else "📱 Telegram"
     web_label = f"💻 Saytlar ({web_count})" if web_count else "💻 Saytlar"
     kb = [
@@ -96,7 +96,7 @@ def get_sources_reply_keyboard(tg_count: int = 0, web_count: int = 0) -> ReplyKe
             KeyboardButton(text="➕ Sayt", style="success")
         ],
         [
-            KeyboardButton(text="🔍 Tekshirish", style="primary"),
+            KeyboardButton(text="🔍 Manbani tekshirish", style="primary"),
             KeyboardButton(text="◀️ Asosiy menyu", style="primary")
         ]
     ]
@@ -104,15 +104,15 @@ def get_sources_reply_keyboard(tg_count: int = 0, web_count: int = 0) -> ReplyKe
 
 
 def get_ai_reply_keyboard(ai_enabled: bool = True) -> ReplyKeyboardMarkup:
-    """AI Tahlilchi Reply klaviaturasi (qisqa nomlar bilan)."""
+    """AI Tahlilchi Reply klaviaturasi (qisqa va unikal nomlar bilan)."""
     if ai_enabled:
-        toggle_btn = KeyboardButton(text="⏸️ O'chirish", style="danger")
+        toggle_btn = KeyboardButton(text="⏸️ AI ni o'chirish", style="danger")
     else:
-        toggle_btn = KeyboardButton(text="▶️ Yoqish", style="success")
+        toggle_btn = KeyboardButton(text="▶️ AI ni yoqish", style="success")
 
     kb = [
         [
-            KeyboardButton(text="🔄 Tekshirish", style="success"),
+            KeyboardButton(text="🔄 Aloqani tekshirish", style="success"),
             toggle_btn
         ],
         [
@@ -126,7 +126,7 @@ def get_logs_reply_keyboard() -> ReplyKeyboardMarkup:
     """Loglar Reply klaviaturasi (qisqa nomlar bilan)."""
     kb = [
         [
-            KeyboardButton(text="🔄 Yangilash", style="success"),
+            KeyboardButton(text="🔄 Loglarni yangilash", style="success"),
             KeyboardButton(text="◀️ Asosiy menyu", style="primary")
         ]
     ]
@@ -149,11 +149,11 @@ def get_cache_reply_keyboard() -> ReplyKeyboardMarkup:
 
 
 def get_keywords_reply_keyboard() -> ReplyKeyboardMarkup:
-    """Kalit so'zlar Reply klaviaturasi (qisqa nomlar bilan)."""
+    """Kalit so'zlar Reply klaviaturasi (qisqa va unikal nomlar bilan)."""
     kb = [
         [
             KeyboardButton(text="➕ So'z qo'shish", style="success"),
-            KeyboardButton(text="🔍 Tekshirish", style="primary")
+            KeyboardButton(text="🔍 Matnni tekshirish", style="primary")
         ],
         [
             KeyboardButton(text="◀️ Asosiy menyu", style="primary")

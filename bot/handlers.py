@@ -104,7 +104,7 @@ def build_status_text() -> str:
         f"🧠 <b>Antidublikat xotirasi (oxirgi 24 soat):</b> {len(deduplicator._history)} ta voqea\n"
         f"👥 <b>Ruxsat etilgan adminlar:</b> {len(settings.admin_id_list)} ta"
         f"{group_info}\n\n"
-        "<i>Tizim barcha 127 ta manbani parallel ravishda barqaror kuzatib bormoqda.</i>"
+        f"<i>Tizim barcha {total_sources} ta nufuzli manbani parallel ravishda barqaror kuzatib bormoqda.</i>"
     )
 
 
@@ -224,7 +224,7 @@ async def cmd_main_menu(message: Message, state: FSMContext) -> None:
 @router.message(Command("check"))
 @router.message(F.text.in_(["🔍 Tekshirish", "🔍 Hozir tekshirish"]))
 async def cmd_check_now(message: Message, state: FSMContext) -> None:
-    """Barcha 127 ta manbani parallel tekshirish va yangi xabarlarni jo'natish."""
+    """Barcha kuzatilayotgan manbalarni parallel tekshirish va yangi xabarlarni jo'natish."""
     await state.clear()
     status_msg = await message.answer(
         "⏳ <b>Barcha manbalar parallel tekshirilmoqda...</b>\n"

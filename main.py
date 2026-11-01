@@ -7,7 +7,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 
-from config import settings, logger
+from config import settings, logger, log_buffer, uz_now, format_uz_time
 from core.storage import storage
 from core.deduplicator import deduplicator
 from parsers.manager import source_manager
@@ -15,9 +15,59 @@ from bot.middlewares import AdminOnlyMiddleware
 from bot.handlers import router as admin_router
 from bot.notifier import send_metro_alert
 
-from config import settings, logger, log_buffer
-
 health_runner = None
+
+async def daily_cache_cleaner_loop(bot: Bot):
+    """
+    Har kuni ertalab soat 07:00 da (O'zbekiston vaqti UTC+5)
+    kesh ma'lumotlarini (seen_posts va dublikat izlarini) avtomatik tozalaydi
+    va barcha adminlarga hisobot xabarini yuboradi.
+    """
+    logger.info("Har kungi 07:00 da keshni tozalash va adminlarga xabar berish xizmati faollashtirildi.")
+    last_cleaned_day = None
+
+    while True:
+        try:
+            now = uz_now()
+            today_str = now.strftime("%Y-%m-%d")
+
+            # Ertalab soat 07:00 (07:00 dan 07:02 gacha) va bugun hali tozalanmagan bo'lsa
+            if now.hour == 7 and now.minute <= 2 and last_cleaned_day != today_str:
+                logger.info("🕒 Rejaviy vaqt keldi: Ertalabki soat 07:00 kesh tozalash boshlanmoqda...")
+                last_cleaned_day = today_str
+
+                cleared_posts = storage.clear()
+                cleared_dedup = deduplicator.clear_history()
+
+                time_str = format_uz_time(now, "%H:%M | %d.%m.%Y")
+                report_text = (
+                    "🧹 <b>KESH AVTOMATIK TOZALANDI (07:00)</b>\n\n"
+                    f"🕒 <b>Vaqt:</b> {time_str} (O'zbekiston vaqti)\n"
+                    f"🗑️ <b>Tozalangan ko'rilgan postlar:</b> <b>{cleared_posts} ta</b>\n"
+                    f"🧠 <b>Yangilangan dublikat xotirasi:</b> <b>{cleared_dedup} ta</b>\n\n"
+                    "⚡ <i>Bugungi yangi kun uchun barcha axborot manbalari yangitdan toza monitoring qilinadi.</i>"
+                )
+
+                admin_ids = settings.admin_id_list
+                for admin_id in admin_ids:
+                    try:
+                        await bot.send_message(
+                            chat_id=admin_id,
+                            text=report_text,
+                            parse_mode=ParseMode.HTML
+                        )
+                    except Exception as err:
+                        logger.warning(f"Admin {admin_id} ga 07:00 kesh hisoboti yetkazilmadi: {err}")
+
+                logger.info(f"07:00 kesh tozalash muvaffaqiyatli yakunlandi. {cleared_posts} ta post tozalandi.")
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"07:00 kesh tozalash tsiklida xatolik: {e}", exc_info=True)
+
+        # Har 20 soniyada vaqtni tekshirib turadi
+        await asyncio.sleep(20)
 
 async def monitor_background_loop(bot: Bot):
     """
@@ -181,6 +231,8 @@ async def run_bot():
     monitor_task = asyncio.create_task(monitor_background_loop(bot))
     # Render uxlamasligi uchun keep-alive vazifasi
     keep_alive_task = asyncio.create_task(keep_alive_loop())
+    # Har kuni ertalab soat 07:00 da keshni avtomatik tozalash va hisobot yuborish
+    cleaner_task = asyncio.create_task(daily_cache_cleaner_loop(bot))
 
     logger.info(
         f"Metro Monitoring Bot muvaffaqiyatli ishga tushdi! "
@@ -200,6 +252,7 @@ async def run_bot():
     finally:
         monitor_task.cancel()
         keep_alive_task.cancel()
+        cleaner_task.cancel()
         if health_runner:
             await health_runner.cleanup()
         await bot.session.close()

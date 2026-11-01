@@ -1,133 +1,516 @@
 {
   "telegram_channels": [
-    {"username": "rost_24uz", "name": "Rost24.uz", "lang": "uz", "priority": "high"},
-    {"username": "u_generalissimus", "name": "Generalissimus", "lang": "uz", "priority": "normal"},
-    {"username": "nigoh_01", "name": "Nigoh", "lang": "uz", "priority": "high"},
-    {"username": "BugungiGap", "name": "Bugungi Gap", "lang": "uz", "priority": "normal"},
-    {"username": "xabaruzofficial", "name": "Xabar.uz Rasmiy", "lang": "uz", "priority": "high"},
-    {"username": "zamon", "name": "Zamon", "lang": "uz", "priority": "normal"},
-    {"username": "burchak", "name": "Burchak", "lang": "uz", "priority": "normal"},
-    {"username": "Rasmiy_xabarlar_Official", "name": "Rasmiy Xabarlar", "lang": "uz", "priority": "high"},
-    {"username": "the_bakiroo", "name": "Otabek Bakirov (Bakiroo)", "lang": "uz", "priority": "high"},
-    {"username": "sputnikuzbek", "name": "Sputnik O'zbekiston", "lang": "uz", "priority": "normal"},
-    {"username": "muhrim2022", "name": "Muhrim (Muhrim A'zamxo'jayev)", "lang": "uz", "priority": "high"},
-    {"username": "Yaxshi_Yomon", "name": "Yaxshi-Yomon", "lang": "uz", "priority": "normal"},
-    {"username": "platformauzb", "name": "Platforma.uz", "lang": "uz", "priority": "normal"},
-    {"username": "i_think_uz", "name": "I Think UZ", "lang": "uz", "priority": "normal"},
-    {"username": "davletovuz", "name": "Davletov.uz", "lang": "uz", "priority": "high"},
-    {"username": "KDUZB", "name": "KD UZB (Kun Davomida)", "lang": "uz", "priority": "normal"},
-    {"username": "uzauz", "name": "UzA Rasmiy", "lang": "uz", "priority": "high"},
-    {"username": "times_officialuz", "name": "Times Official UZ", "lang": "uz", "priority": "normal"},
-    {"username": "gazetauz_uzb", "name": "Gazeta.uz O'zbekcha", "lang": "uz", "priority": "high"},
-    {"username": "TezkorOzbekiston", "name": "Tezkor O'zbekiston", "lang": "uz", "priority": "normal"},
-    {"username": "xushnudbek", "name": "Xushnudbek.uz", "lang": "uz", "priority": "high"},
-    {"username": "burchakostida", "name": "Burchak Ostida", "lang": "uz", "priority": "normal"},
-    {"username": "RepostUZ", "name": "Repost.uz", "lang": "ru/uz", "priority": "normal"},
-    {"username": "daryo_live", "name": "Daryo Live", "lang": "uz", "priority": "high"},
-    {"username": "Daryo", "name": "Daryo Rasmiy", "lang": "uz", "priority": "high"},
-    {"username": "qoraxabar", "name": "QoraXabar", "lang": "uz", "priority": "normal"},
-    {"username": "uzbekistan24", "name": "O'zbekiston 24", "lang": "uz", "priority": "high"},
-    {"username": "Jx_uzb", "name": "Jx UZB", "lang": "uz", "priority": "normal"},
-    {"username": "daryouz_dunyo_yangilillar_uz", "name": "Daryo Dunyo Yangiliklar", "lang": "uz", "priority": "normal"},
-    {"username": "UnchaMuncha", "name": "Uncha Muncha", "lang": "uz", "priority": "normal"},
-    {"username": "effectuz", "name": "Effect.uz", "lang": "uz", "priority": "normal"},
-    {"username": "HokimBuva_Xokim_Buva", "name": "Hokim Buva", "lang": "uz", "priority": "normal"},
-    {"username": "TYUZBEK", "name": "TY UZBEK", "lang": "uz", "priority": "normal"},
-    {"username": "BORGAPUZ", "name": "Bor Gap UZ", "lang": "uz", "priority": "normal"},
-    {"username": "BIRINCHI_UZ", "name": "Birinchi UZ", "lang": "uz", "priority": "normal"},
-    {"username": "kunuzofficial", "name": "Kun.uz Rasmiy", "lang": "uz", "priority": "high"},
-    {"username": "qalampir", "name": "Qalampir.uz", "lang": "uz", "priority": "high"},
-    {"username": "mintrans_uz", "name": "Transport Vazirligi", "lang": "uz", "priority": "high"},
-    {"username": "toshshaxartransxizmat", "name": "Toshshahartransxizmat", "lang": "uz", "priority": "high"},
-    {"username": "fvv_uz", "name": "FVV Rasmiy", "lang": "uz", "priority": "high"},
-    {"username": "chp_uz", "name": "CHP Tashkent", "lang": "ru", "priority": "normal"},
-    {"username": "kurbanoffnet", "name": "Kurbanoff.net", "lang": "ru", "priority": "normal"},
-    {"username": "podrobnouz", "name": "Podrobno.uz", "lang": "ru", "priority": "normal"},
-    {"username": "nova24uz", "name": "Nova24", "lang": "ru", "priority": "normal"},
-    {"username": "potrebitel_uz", "name": "Potrebitel.uz", "lang": "ru", "priority": "normal"},
-    {"username": "trolluz", "name": "Troll.uz", "lang": "uz", "priority": "normal"},
-    {"username": "afishauz", "name": "Afisha Tashkent", "lang": "ru/uz", "priority": "normal"},
-    {"username": "aniquz", "name": "Aniq.uz Yangiliklar", "lang": "uz", "priority": "normal"},
-    {"username": "darakchi", "name": "Darakchi.uz", "lang": "uz", "priority": "normal"},
-    {"username": "eduuz", "name": "Oliy Ta'lim Vazirligi", "lang": "uz", "priority": "normal"},
-    {"username": "hudud24official", "name": "Hudud24 Rasmiy", "lang": "uz", "priority": "normal"},
-    {"username": "hududiy_elektr_tarmoqlari", "name": "Hududiy Elektr Tarmoqlari", "lang": "uz", "priority": "normal"},
-    {"username": "iibb_uz", "name": "Toshkent Shahar IIBB", "lang": "uz", "priority": "high"},
-    {"username": "iiv_uz", "name": "Ichki Ishlar Vazirligi", "lang": "uz", "priority": "high"},
-    {"username": "kunuznews", "name": "Kun.uz Yangiliklar Tezkor", "lang": "uz", "priority": "high"},
-    {"username": "kursivuz", "name": "Kursiv Uzbekistan", "lang": "uz", "priority": "normal"},
-    {"username": "minzdravuz", "name": "Sog'liqni Saqlash Vazirligi", "lang": "uz", "priority": "normal"},
-    {"username": "mydayuz", "name": "Myday Tashkent", "lang": "ru/uz", "priority": "normal"},
-    {"username": "novosti_uzbekistana", "name": "Novosti Uzbekistana", "lang": "ru", "priority": "normal"},
-    {"username": "poytaxt_uz", "name": "Poytaxt Xabarlari", "lang": "uz", "priority": "normal"},
-    {"username": "shoshilinch_xabarlar", "name": "Shoshilinch Xabarlar", "lang": "uz", "priority": "normal"},
-    {"username": "spotuz", "name": "Spot.uz Biznes", "lang": "uz", "priority": "normal"},
-    {"username": "sputnikuz", "name": "Sputnik Новости", "lang": "ru", "priority": "normal"},
-    {"username": "ssvuz", "name": "SSV Matbuot Xizmati", "lang": "uz", "priority": "normal"},
-    {"username": "statistika_rasmiy", "name": "Statistika Agentligi", "lang": "uz", "priority": "normal"},
-    {"username": "subyektivuz", "name": "Subyektiv", "lang": "uz", "priority": "normal"},
-    {"username": "talabauz", "name": "Talaba UZ", "lang": "uz", "priority": "normal"},
-    {"username": "tashkent_land", "name": "Tashkent Land", "lang": "ru/uz", "priority": "normal"},
-    {"username": "tashkent_vkurse", "name": "Tashkent Vkurse", "lang": "ru", "priority": "normal"},
-    {"username": "tashkentcity_official", "name": "Tashkent City Rasmiy", "lang": "uz", "priority": "normal"},
-    {"username": "tezkor_yangiliklar", "name": "Tezkor Yangiliklar", "lang": "uz", "priority": "normal"},
-    {"username": "toshkent24", "name": "Toshkent 24", "lang": "uz", "priority": "normal"},
-    {"username": "toshkent_hokimiyati", "name": "Toshkent Shahar Hokimligi", "lang": "uz", "priority": "high"},
-    {"username": "toshkentliklar", "name": "Toshkentliklar", "lang": "uz", "priority": "normal"},
-    {"username": "uzb_transport", "name": "O'zbekiston Transporti", "lang": "uz", "priority": "high"},
-    {"username": "voditeli_tashkenta", "name": "Voditeli Tashkenta", "lang": "ru", "priority": "normal"},
-    {"username": "yangiliklar", "name": "O'zbekiston Yangiliklari", "lang": "uz", "priority": "normal"},
-    {"username": "yoshlar_kundaligi", "name": "Yoshlar Kundaligi", "lang": "uz", "priority": "normal"},
-    {"username": "yoshlaragentligi", "name": "Yoshlar Agentligi", "lang": "uz", "priority": "normal"},
-    {"username": "anhor_uz", "name": "Anhor.uz Rasmiy", "lang": "ru/uz", "priority": "normal"},
-    {"username": "bugun_yangiliklar", "name": "Bugun Yangiliklar", "lang": "uz", "priority": "normal"},
-    {"username": "daryo_uz", "name": "Daryo UZ Xabarlar", "lang": "uz", "priority": "high"},
-    {"username": "gazetauz", "name": "Gazeta.uz Rasmiy", "lang": "ru", "priority": "high"},
-    {"username": "kun_uz", "name": "Kun UZ Kanal", "lang": "uz", "priority": "high"},
-    {"username": "militsiya_tv", "name": "Militsiya TV", "lang": "uz", "priority": "normal"},
-    {"username": "my5tv", "name": "Mening Yurtim TV", "lang": "uz", "priority": "normal"},
-    {"username": "novosti_tashkenta", "name": "Novosti Tashkenta", "lang": "ru", "priority": "normal"},
-    {"username": "podrobno", "name": "Podrobno Новости", "lang": "ru", "priority": "normal"},
-    {"username": "poytaxt", "name": "Poytaxt Yangiliklari", "lang": "uz", "priority": "normal"},
-    {"username": "tashkent_chp", "name": "Tashkent CHP Yangiliklar", "lang": "ru/uz", "priority": "normal"},
-    {"username": "tashkent_segodnya", "name": "Tashkent Segodnya", "lang": "ru", "priority": "normal"},
-    {"username": "tezkor_xabarlar_uz", "name": "Tezkor Xabarlar UZ", "lang": "uz", "priority": "normal"},
-    {"username": "uzbekistan", "name": "Uzbekistan Inform", "lang": "ru/uz", "priority": "normal"},
-    {"username": "uznews", "name": "UzNews Yangiliklar", "lang": "ru/uz", "priority": "normal"},
-    {"username": "uzreport", "name": "UzReport TV", "lang": "uz", "priority": "high"},
-    {"username": "yuz_official", "name": "Yangi O'zbekiston (Yuz.uz)", "lang": "uz", "priority": "high"}
+    {
+      "username": "mintrans_uz",
+      "name": "Transport Vazirligi",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "toshshaxartransxizmat",
+      "name": "Toshshahartransxizmat",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "uzb_transport",
+      "name": "O'zbekiston Transporti",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "toshkent_hokimiyati",
+      "name": "Toshkent Shahar Hokimligi",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "iibb_uz",
+      "name": "Toshkent Shahar IIBB",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "iiv_uz",
+      "name": "Ichki Ishlar Vazirligi",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "fvv_uz",
+      "name": "FVV Rasmiy",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "kunuzofficial",
+      "name": "Kun.uz Rasmiy",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "kunuznews",
+      "name": "Kun.uz Yangiliklar Tezkor",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "Daryo",
+      "name": "Daryo Rasmiy",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "daryo_live",
+      "name": "Daryo Live",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "gazetauz_uzb",
+      "name": "Gazeta.uz O'zbekcha",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "gazetauz",
+      "name": "Gazeta.uz Ruscha",
+      "lang": "ru",
+      "priority": "high"
+    },
+    {
+      "username": "uzauz",
+      "name": "UzA Rasmiy",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "xabaruzofficial",
+      "name": "Xabar.uz Rasmiy",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "qalampir",
+      "name": "Qalampir.uz",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "uzbekistan24",
+      "name": "O'zbekiston 24",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "uzreport",
+      "name": "UzReport TV",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "yuz_official",
+      "name": "Yangi O'zbekiston (Yuz.uz)",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "rost_24uz",
+      "name": "Rost24.uz",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "davletovuz",
+      "name": "Davletov.uz",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "xushnudbek",
+      "name": "Xushnudbek.uz",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "the_bakiroo",
+      "name": "Otabek Bakirov (Bakiroo)",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "muhrim2022",
+      "name": "Muhrim",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "nigoh_01",
+      "name": "Nigoh",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "kurbanoffnet",
+      "name": "Kurbanoff.net",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "potrebitel_uz",
+      "name": "Potrebitel.uz",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "trolluz",
+      "name": "Troll.uz",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "voditeli_tashkenta",
+      "name": "Voditeli Tashkenta",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "chp_uz",
+      "name": "CHP Tashkent",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "tashkent_chp",
+      "name": "Tashkent CHP Yangiliklar",
+      "lang": "ru/uz",
+      "priority": "normal"
+    },
+    {
+      "username": "tashkent_segodnya",
+      "name": "Tashkent Segodnya",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "tashkent_vkurse",
+      "name": "Tashkent Vkurse",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "tashkent_land",
+      "name": "Tashkent Land",
+      "lang": "ru/uz",
+      "priority": "normal"
+    },
+    {
+      "username": "toshkentliklar",
+      "name": "Toshkentliklar",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "toshkent24",
+      "name": "Toshkent 24",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "poytaxt_uz",
+      "name": "Poytaxt Xabarlari",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "podrobnouz",
+      "name": "Podrobno.uz",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "nova24uz",
+      "name": "Nova24",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "RepostUZ",
+      "name": "Repost.uz",
+      "lang": "ru/uz",
+      "priority": "normal"
+    },
+    {
+      "username": "uznews",
+      "name": "UzNews Yangiliklar",
+      "lang": "ru/uz",
+      "priority": "normal"
+    },
+    {
+      "username": "spotuz",
+      "name": "Spot.uz Biznes",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "kursivuz",
+      "name": "Kursiv Uzbekistan",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "afishauz",
+      "name": "Afisha Tashkent",
+      "lang": "ru/uz",
+      "priority": "normal"
+    },
+    {
+      "username": "aniquz",
+      "name": "Aniq.uz Yangiliklar",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "darakchi",
+      "name": "Darakchi.uz",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "hudud24official",
+      "name": "Hudud24 Rasmiy",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "hududiy_elektr_tarmoqlari",
+      "name": "Hududiy Elektr Tarmoqlari",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "platformauzb",
+      "name": "Platforma.uz",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "subyektivuz",
+      "name": "Subyektiv",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "shoshilinch_xabarlar",
+      "name": "Shoshilinch Xabarlar",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "tezkor_yangiliklar",
+      "name": "Tezkor Yangiliklar",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "TezkorOzbekiston",
+      "name": "Tezkor O'zbekiston",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "effectuz",
+      "name": "Effect.uz",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "UnchaMuncha",
+      "name": "Uncha Muncha",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "sputnikuzbek",
+      "name": "Sputnik O'zbekiston",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "sputnikuz",
+      "name": "Sputnik Новости",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "militsiya_tv",
+      "name": "Militsiya TV",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "my5tv",
+      "name": "Mening Yurtim TV",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "burchakostida",
+      "name": "Burchak Ostida",
+      "lang": "uz",
+      "priority": "normal"
+    },
+    {
+      "username": "novosti_uzbekistana",
+      "name": "Novosti Uzbekistana",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "novosti_tashkenta",
+      "name": "Novosti Tashkenta",
+      "lang": "ru",
+      "priority": "normal"
+    },
+    {
+      "username": "anhor_uz",
+      "name": "Anhor.uz Rasmiy",
+      "lang": "ru/uz",
+      "priority": "normal"
+    },
+    {
+      "username": "Rasmiy_xabarlar_Official",
+      "name": "Rasmiy Xabarlar",
+      "lang": "uz",
+      "priority": "high"
+    },
+    {
+      "username": "zamon",
+      "name": "Zamon",
+      "lang": "uz",
+      "priority": "normal"
+    }
   ],
   "web_sources": [
-    {"id": "kun_uz", "name": "Kun.uz O'zbekcha", "url": "https://kun.uz", "feed_url": "https://kun.uz/news/rss", "lang": "uz", "type": "rss"},
-    {"id": "kun_uz_ru", "name": "Kun.uz Ruscha", "url": "https://kun.uz/ru", "feed_url": "https://kun.uz/ru/news/rss", "lang": "ru", "type": "rss"},
-    {"id": "daryo_uz", "name": "Daryo.uz O'zbekcha", "url": "https://daryo.uz", "feed_url": "https://daryo.uz/rss/", "lang": "uz", "type": "rss"},
-    {"id": "daryo_uz_ru", "name": "Daryo.uz Ruscha", "url": "https://daryo.uz/ru", "feed_url": "https://daryo.uz/ru/rss/", "lang": "ru", "type": "rss"},
-    {"id": "gazeta_uz_oz", "name": "Gazeta.uz O'zbekcha", "url": "https://www.gazeta.uz/uz", "feed_url": "https://www.gazeta.uz/uz/rss/", "lang": "uz", "type": "rss"},
-    {"id": "gazeta_uz_ru", "name": "Gazeta.uz Ruscha", "url": "https://www.gazeta.uz/ru", "feed_url": "https://www.gazeta.uz/ru/rss/", "lang": "ru", "type": "rss"},
-    {"id": "gazeta_uz_all", "name": "Gazeta.uz Barcha Yangiliklar", "url": "https://www.gazeta.uz", "feed_url": "https://www.gazeta.uz/rss/", "lang": "ru/uz", "type": "rss"},
-    {"id": "uza_uz", "name": "UzA O'zbekcha", "url": "https://uza.uz/uz", "feed_url": "https://uza.uz/uz/rss", "lang": "uz", "type": "rss"},
-    {"id": "uza_uz_ru", "name": "UzA Ruscha", "url": "https://uza.uz/ru", "feed_url": "https://uza.uz/ru/rss", "lang": "ru", "type": "rss"},
-    {"id": "xabar_uz", "name": "Xabar.uz O'zbekcha", "url": "https://xabar.uz", "feed_url": "https://xabar.uz/rss", "lang": "uz", "type": "rss"},
-    {"id": "xabar_uz_ru", "name": "Xabar.uz Ruscha", "url": "https://xabar.uz/ru", "feed_url": "https://xabar.uz/ru/rss", "lang": "ru", "type": "rss"},
-    {"id": "aniq_uz", "name": "Aniq.uz O'zbekcha", "url": "https://aniq.uz", "feed_url": "https://aniq.uz/yangiliklar/rss", "lang": "uz", "type": "rss"},
-    {"id": "podrobno_uz", "name": "Podrobno.uz", "url": "https://podrobno.uz", "feed_url": "https://podrobno.uz/rss/", "lang": "ru", "type": "rss"},
-    {"id": "nova24_uz", "name": "Nova24.uz", "url": "https://nova24.uz", "feed_url": "https://nova24.uz/feed/", "lang": "ru", "type": "rss"},
-    {"id": "tashmetro_uz", "name": "Tashkent Metro Portali", "url": "https://tashmetro.uz", "feed_url": "https://tashmetro.uz/feed/", "lang": "uz", "type": "web_html"},
-    {"id": "mintrans_uz", "name": "Mintrans Portali", "url": "https://mintrans.uz", "feed_url": "https://mintrans.uz/rss", "lang": "uz", "type": "rss"},
-    {"id": "upl_uz", "name": "UPL.uz Yangiliklar", "url": "https://upl.uz", "feed_url": "https://upl.uz/rss.xml", "lang": "ru", "type": "rss"},
-    {"id": "review_uz", "name": "Iqtisodiy Sharh", "url": "https://review.uz", "feed_url": "https://review.uz/rss", "lang": "ru/uz", "type": "rss"},
-    {"id": "spot_uz", "name": "Spot.uz Biznes", "url": "https://www.spot.uz", "feed_url": "https://www.spot.uz/ru/rss/", "lang": "ru", "type": "rss"},
-    {"id": "zamon_uz", "name": "Zamon.uz Inglizcha", "url": "https://zamon.uz", "feed_url": "https://zamon.uz/en/rss/", "lang": "en", "type": "rss"},
-    {"id": "zamon_uz_uz", "name": "Zamon.uz O'zbekcha", "url": "https://zamon.uz/uz", "feed_url": "https://zamon.uz/uz/rss/", "lang": "uz", "type": "rss"},
-    {"id": "sputniknews_uz", "name": "Sputnik O'zbekiston", "url": "https://sputniknews.uz", "feed_url": "https://sputniknews.uz/export/rss2/archive/index.xml", "lang": "uz", "type": "rss"},
-    {"id": "anhor_uz", "name": "Anhor.uz Ruscha", "url": "https://anhor.uz", "feed_url": "https://anhor.uz/api/rss?locale=ru", "lang": "ru", "type": "rss"},
-    {"id": "anhor_uz_uz", "name": "Anhor.uz O'zbekcha", "url": "https://anhor.uz/uz", "feed_url": "https://anhor.uz/api/rss?locale=uz", "lang": "uz", "type": "rss"},
-    {"id": "anhor_feed", "name": "Anhor.uz Feed", "url": "https://anhor.uz", "feed_url": "https://anhor.uz/feed/", "lang": "ru/uz", "type": "rss"},
-    {"id": "kursiv_media", "name": "Kursiv Media KZ", "url": "https://kz.kursiv.media/uz", "feed_url": "https://kz.kursiv.media/uz/feed/", "lang": "uz", "type": "rss"},
-    {"id": "kursiv_uz", "name": "Kursiv Media UZ", "url": "https://kursiv.media/uz", "feed_url": "https://kursiv.media/uz/feed/", "lang": "uz", "type": "rss"},
-    {"id": "kursiv_ru", "name": "Kursiv Media RU", "url": "https://kursiv.media/ru", "feed_url": "https://kursiv.media/ru/feed/", "lang": "ru", "type": "rss"},
-    {"id": "centralasia_media", "name": "CentralAsia Media", "url": "https://centralasia.media", "feed_url": "https://centralasia.media/rss", "lang": "ru", "type": "rss"},
-    {"id": "uznews_uz", "name": "UzNews.uz", "url": "https://uznews.uz", "feed_url": "https://uznews.uz/feed/rss", "lang": "ru/uz", "type": "rss"},
-    {"id": "nuz_uz", "name": "Novosti Uzbekistana NUZ", "url": "https://nuz.uz", "feed_url": "https://nuz.uz/feed", "lang": "ru", "type": "rss"}
+    {
+      "id": "kun_uz",
+      "name": "Kun.uz O'zbekcha",
+      "url": "https://kun.uz",
+      "feed_url": "https://kun.uz/news/rss",
+      "lang": "uz",
+      "type": "rss"
+    },
+    {
+      "id": "kun_uz_ru",
+      "name": "Kun.uz Ruscha",
+      "url": "https://kun.uz/ru",
+      "feed_url": "https://kun.uz/ru/news/rss",
+      "lang": "ru",
+      "type": "rss"
+    },
+    {
+      "id": "daryo_uz",
+      "name": "Daryo.uz O'zbekcha",
+      "url": "https://daryo.uz",
+      "feed_url": "https://daryo.uz/rss/",
+      "lang": "uz",
+      "type": "rss"
+    },
+    {
+      "id": "gazeta_uz_oz",
+      "name": "Gazeta.uz O'zbekcha",
+      "url": "https://www.gazeta.uz/uz",
+      "feed_url": "https://www.gazeta.uz/uz/rss/",
+      "lang": "uz",
+      "type": "rss"
+    },
+    {
+      "id": "gazeta_uz_ru",
+      "name": "Gazeta.uz Ruscha",
+      "url": "https://www.gazeta.uz/ru",
+      "feed_url": "https://www.gazeta.uz/ru/rss/",
+      "lang": "ru",
+      "type": "rss"
+    },
+    {
+      "id": "uza_uz",
+      "name": "UzA O'zbekcha",
+      "url": "https://uza.uz/uz",
+      "feed_url": "https://uza.uz/uz/rss",
+      "lang": "uz",
+      "type": "rss"
+    },
+    {
+      "id": "xabar_uz",
+      "name": "Xabar.uz O'zbekcha",
+      "url": "https://xabar.uz",
+      "feed_url": "https://xabar.uz/rss",
+      "lang": "uz",
+      "type": "rss"
+    },
+    {
+      "id": "aniq_uz",
+      "name": "Aniq.uz O'zbekcha",
+      "url": "https://aniq.uz",
+      "feed_url": "https://aniq.uz/yangiliklar/rss",
+      "lang": "uz",
+      "type": "rss"
+    },
+    {
+      "id": "podrobno_uz",
+      "name": "Podrobno.uz",
+      "url": "https://podrobno.uz",
+      "feed_url": "https://podrobno.uz/rss/",
+      "lang": "ru",
+      "type": "rss"
+    },
+    {
+      "id": "nova24_uz",
+      "name": "Nova24.uz",
+      "url": "https://nova24.uz",
+      "feed_url": "https://nova24.uz/feed/",
+      "lang": "ru",
+      "type": "rss"
+    },
+    {
+      "id": "tashmetro_uz",
+      "name": "Tashkent Metro Portali",
+      "url": "https://tashmetro.uz",
+      "feed_url": "https://tashmetro.uz/feed/",
+      "lang": "uz",
+      "type": "web_html"
+    },
+    {
+      "id": "mintrans_uz",
+      "name": "Mintrans Portali",
+      "url": "https://mintrans.uz",
+      "feed_url": "https://mintrans.uz/rss",
+      "lang": "uz",
+      "type": "rss"
+    },
+    {
+      "id": "uznews_uz",
+      "name": "UzNews.uz",
+      "url": "https://uznews.uz",
+      "feed_url": "https://uznews.uz/feed/rss",
+      "lang": "ru/uz",
+      "type": "rss"
+    },
+    {
+      "id": "spot_uz",
+      "name": "Spot.uz Biznes",
+      "url": "https://www.spot.uz",
+      "feed_url": "https://www.spot.uz/ru/rss/",
+      "lang": "ru",
+      "type": "rss"
+    },
+    {
+      "id": "upl_uz",
+      "name": "UPL.uz Yangiliklar",
+      "url": "https://upl.uz",
+      "feed_url": "https://upl.uz/rss.xml",
+      "lang": "ru",
+      "type": "rss"
+    }
   ]
 }

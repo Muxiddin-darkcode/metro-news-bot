@@ -100,13 +100,17 @@ class TestStrictMetroMonitoring(unittest.TestCase):
 
     def test_group_id_and_target_chats(self):
         from config import Settings
-        s = Settings(ADMIN_IDS="111,222", GROUP_ID="-100987654321")
+        s = Settings(_env_file=None, ADMIN_IDS="111,222", GROUP_ID="-100987654321")
         self.assertEqual(s.admin_id_list, [111, 222])
         self.assertEqual(s.group_id_list, [-100987654321])
         self.assertEqual(s.target_chat_ids, [111, 222, -100987654321])
 
+        # 3 ta alohida admin o'zgaruvchisi testi
+        s_3vars = Settings(_env_file=None, ADMIN_ID_1="111", ADMIN_ID_2="222", ADMIN_ID_3="333")
+        self.assertEqual(s_3vars.admin_id_list, [111, 222, 333])
+
         # Test empty group ID
-        s_empty = Settings(ADMIN_IDS="111,222", GROUP_ID="")
+        s_empty = Settings(_env_file=None, ADMIN_IDS="111,222", GROUP_ID="")
         self.assertEqual(s_empty.target_chat_ids, [111, 222])
 
     def test_custom_keywords_and_explain_filter(self):

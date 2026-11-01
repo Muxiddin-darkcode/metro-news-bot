@@ -11,7 +11,14 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 class Settings(BaseSettings):
     BOT_TOKEN: str = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
-    ADMIN_IDS: str = "6648563749,240775367,337332277"
+    
+    # 3 ta alohida Admin Telegram ID o'zgaruvchilari
+    ADMIN_ID_1: str = ""
+    ADMIN_ID_2: str = ""
+    ADMIN_ID_3: str = ""
+    
+    # Umumiy ro'yxat varianti (ixtiyoriy, vergul bilan)
+    ADMIN_IDS: str = ""
     GROUP_ID: str = ""
     CHECK_INTERVAL_SECONDS: int = 60
     MAX_CONCURRENT_REQUESTS: int = 20
@@ -43,12 +50,22 @@ class Settings(BaseSettings):
     @property
     def admin_id_list(self) -> List[int]:
         import re
-        raw = os.environ.get("ADMIN_IDS", self.ADMIN_IDS)
-        ids = [int(x) for x in re.findall(r'\d+', str(raw))]
-        # 6648563749 va boshqa asosiy adminlar doimo ruxsatda bo'lishini kafolatlaymiz
-        for fallback_id in [6648563749, 240775367, 337332277]:
-            if fallback_id not in ids:
-                ids.append(fallback_id)
+        ids: List[int] = []
+        raw_list = [
+            self.ADMIN_ID_1 or os.environ.get("ADMIN_1", ""),
+            self.ADMIN_ID_2 or os.environ.get("ADMIN_2", ""),
+            self.ADMIN_ID_3 or os.environ.get("ADMIN_3", ""),
+            self.ADMIN_IDS or os.environ.get("ADMIN_IDS", "")
+        ]
+        for val in raw_list:
+            if val:
+                for match in re.findall(r'\d+', str(val)):
+                    v = int(match)
+                    if v not in ids:
+                        ids.append(v)
+        # Agar hech qanday o'zgaruvchi berilmagan bo'lsa, asosiy adminlar
+        if not ids:
+            return [6648563749, 240775367, 337332277]
         return ids
 
     @property

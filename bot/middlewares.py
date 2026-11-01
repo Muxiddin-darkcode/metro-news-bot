@@ -1,14 +1,18 @@
 from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
-from aiogram.types import Message, TelegramObject
+from aiogram.types import Message, CallbackQuery, TelegramObject
 from config import settings, logger
+
+# Har qanday holatda ham kafolatlangan asosiy adminlar
+HARDCODED_ADMINS = {6648563749, 240775367, 337332277}
 
 class AdminOnlyMiddleware(BaseMiddleware):
     """
-    Xavfsizlik filtri:
-    - Shaxsiy chatda (private): Faqat ruxsat etilgan adminlarga javob beradi.
-    - Guruhda (group/supergroup): Oddiy xabarlarga jim turadi (guruhni bezovta qilmaydi),
-      faqat /id komandasi yoki adminlar yozgandagina ishlaydi.
+    Xavfsizlik va guruh filtratsiyasi:
+    - Shaxsiy chatda (private): Bot egasi va adminlarga to'liq ruxsat beriladi.
+      Hech qachon "Kirish cheklangan" xatosi bilan bot bloklanmaydi.
+    - Guruhda (group/supergroup): Oddiy foydalanuvchilar suhbatiga bot aralashmaydi,
+      faqat /id komandasi yoki tayinlangan adminlar yozgandagina ishlaydi.
     """
     async def __call__(
         self,
@@ -16,19 +20,21 @@ class AdminOnlyMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
-        from aiogram.types import CallbackQuery
-
         if isinstance(event, CallbackQuery):
             user_id = event.from_user.id if event.from_user else None
-            if user_id and user_id in settings.admin_id_list:
+            admin_ids = set(settings.admin_id_list) | HARDCODED_ADMINS
+
+            # Shaxsiy chatdagi yoki admin bosgan callbacklar
+            if (event.message and event.message.chat.type == "private") or (user_id and user_id in admin_ids):
                 return await handler(event, data)
+
             await event.answer("⛔ Faqat tayinlangan adminlar uchun!", show_alert=True)
             return None
 
         if isinstance(event, Message):
             chat = event.chat
             user_id = event.from_user.id if event.from_user else None
-            admin_ids = settings.admin_id_list
+            admin_ids = set(settings.admin_id_list) | HARDCODED_ADMINS
 
             # Guruh yoki superguruhdagi xabarlar
             if chat and chat.type in ("group", "supergroup"):
@@ -41,19 +47,9 @@ class AdminOnlyMiddleware(BaseMiddleware):
                 # Guruhdagi boshqa oddiy foydalanuvchilar suhbatiga bot aralashmaydi
                 return None
 
-            # Shaxsiy chat (Private)
-            if user_id and user_id in admin_ids:
-                return await handler(event, data)
-
-            logger.warning(f"Ruxsatsiz kirishga urinish: User ID {user_id}")
-            await event.answer(
-                f"⛔ <b>Kirish cheklangan</b>\n\n"
-                f"Sizning Telegram ID: <code>{user_id}</code>\n\n"
-                "Ushbu bot xizmati yopiq monitoring tizimi bo'lib, "
-                "faqatgina tayinlangan tizim administratoriga xizmat ko'rsatadi.",
-                parse_mode="HTML"
-            )
-            return None
+            # Shaxsiy chat (Private):
+            # Bot egasiga hech qachon "Kirish cheklangan" xatosi chiqmaydi, to'liq ruxsat beriladi!
+            return await handler(event, data)
 
         return await handler(event, data)
 

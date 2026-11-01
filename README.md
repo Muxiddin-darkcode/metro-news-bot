@@ -23,6 +23,7 @@ Metro News/
 │   └── middlewares.py        # 2 ta admindan boshqalarni 100% cheklovchi xavfsizlik
 │
 ├── core/
+│   ├── ai_analyzer.py        # Dual AI Tahlilchi (Gemini API + OpenRouter Fallback)
 │   ├── filter.py             # Metro so'z boyligi va bekatlar filtri (Lotin va Krill)
 │   ├── deduplicator.py       # Kross-manbali matn o'xshashligi tahlili (Stemming + Jaccard/Overlap)
 │   └── storage.py            # No-DB: Dublikatlardan himoya (xotira keshi + disk)
@@ -39,6 +40,7 @@ Metro News/
 │   └── seen_fingerprints.json# Oxirgi 24 soatlik voqealar izi (antidublikat uchun)
 │
 ├── tests/
+│   ├── test_ai_analyzer.py   # AI tahlilchi, fallback va HTML formatlash testlari
 │   └── test_monitor.py       # Birlik testlar (Filtr, Antidublikat, Kross-o'xshashlik)
 │
 ├── requirements.txt          # Kerakli Python kutubxonalari
@@ -74,6 +76,13 @@ MAX_CONCURRENT_REQUESTS=15
 
 # Kross-dublikat o'xshashlik chegarasi (0.65 = 65%)
 SIMILARITY_THRESHOLD=0.65
+
+# AI Tahlilchi sozlamalari (Gemini + OpenRouter Fallback)
+AI_ENABLED=True
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+GEMINI_MODEL=gemini-1.5-flash
+OPENROUTER_API_KEY=YOUR_OPENROUTER_API_KEY
+OPENROUTER_MODEL=google/gemini-2.0-flash-exp:free
 ```
 
 ---
@@ -99,6 +108,7 @@ Adminlar Telegram orqali zamonaviy **Inline Dashboard** va qulay Reply klaviatur
 
 - `/panel` (yoki `/admin`, `🎛️ Boshqaruv paneli`) — Asosiy interaktiv admin boshqaruv paneli (Dashboard);
 - `/start` — Tizim bilan tanishuv, asosiy menyu va tezkor klaviatura;
+- `/today` (`📅 Bugungi yangiliklar`) — Bugun O'zbekiston vaqti bilan topilgan barcha yangiliklarni AI xulosalari bilan birga ko'rish;
 - `/status` — Tizim holati (monitoring holati, tekshiruv vaqti, kesh va antidublikat statistikasi);
 - `/check` — Barcha manbalarni navbatdan tashqari parallel tekshirish va yangi xabarlarni darhol jo'natish;
 - `/sources` — Manbalar boshqaruvi (Telegram kanallarni va saytlarni sahifalab ko'rish, yangi kanal qo'shish, o'chirish va bittalab testlash);
@@ -108,7 +118,9 @@ Adminlar Telegram orqali zamonaviy **Inline Dashboard** va qulay Reply klaviatur
 - `/settings` (`⚙️ Sozlamalar`) — Monitoringni vaqtincha to'xtatish (Pause/Resume), tekshirish oralig'ini (30s, 60s, 120s, 300s) va dublikat sezgirligini (0.50, 0.65, 0.75, 0.85) to'g'ridan-to'g'ri sozlash;
 - `/ping` (yoki `/diag`) — Telegram API kechikishi (ping), server vaqti (UTC+5) va diagnostika ma'lumotlari;
 - `/test_alert` — Namuna tariqasida haqiqiy ko'rinishdagi test metro xabarnomasini jo'natish;
+- `/ai` (yoki `/ai_test`) — AI tahlilini namunaviy xabar yoki o'z matningiz orqali sinab ko'rish;
 - `/id` — Chat yoki Guruh ID sini aniqlash (guruhga qo'shib /id yozilsa, uning ID sini beradi);
+- **AI Tahlilchi Boshqaruvi** — Admin paneldan AI holatini ko'rish, yoqish/o'chirish, Gemini va OpenRouter provayderlarini tekshirish;
 - **Keshni tozalash** — Keshdagi ko'rilgan xabarlar yoki antidublikat izlarini xavfsiz tozalash.
 
 
@@ -117,7 +129,12 @@ Adminlar Telegram orqali zamonaviy **Inline Dashboard** va qulay Reply klaviatur
 
 ## 🧪 Testlarni Ishga Tushirish
 
-Filtr, kirill/lotin tahlili va kross-dublikat algoritmlarini tekshirish uchun:
+1. **AI Tahlilchi va Fallback testi:**
+```powershell
+.\.venv\Scripts\python tests/test_ai_analyzer.py
+```
+
+2. **Filtr, kirill/lotin tahlili va kross-dublikat algoritmlarini tekshirish:**
 ```powershell
 .\.venv\Scripts\python -m unittest tests/test_monitor.py
 ```

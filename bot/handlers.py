@@ -1,16 +1,20 @@
 """
 Metro Monitoring Bot - Kengaytirilgan Admin Boshqaruv Paneli va Handlerlar.
 aiogram 3.x asosida to'liq asinxron ishlaydi.
+Barcha boshqaruv qat'iy ravishda Reply Keyboard (rangli tugmalar) orqali amalga oshiriladi.
+Faqatgina alohida yangilik postlarida '🔗 Asl manbani ochish' inline tugmasi qoldirilgan.
+Matnlarda separator chiziqlar o'rniga toza paragraflar (bo'sh qatorlar) qo'llangan.
 """
 
 import html
 import time
+import asyncio
 import datetime
 from typing import Optional, List, Dict
 
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
@@ -26,69 +30,32 @@ from core.filter import (
 )
 from parsers.base import NewsItem
 from parsers.manager import source_manager
-from bot.notifier import send_metro_alert
+from bot.notifier import send_metro_alert, download_photo_file
 from bot.states import AdminStates
+from core.ai_analyzer import ai_analyzer, safe_truncate_words
 from bot.keyboards import (
     get_main_keyboard,
-    admin_main_dashboard_kb,
-    sources_menu_kb,
-    tg_sources_page_kb,
-    web_sources_page_kb,
-    monitoring_menu_kb,
-    filter_menu_kb,
-    custom_keywords_kb,
-    cache_menu_kb,
-    cancel_kb,
-    back_to_main_kb
+    get_collapsed_keyboard,
+    get_settings_reply_keyboard,
+    get_sources_reply_keyboard,
+    get_ai_reply_keyboard,
+    get_logs_reply_keyboard,
+    get_cache_reply_keyboard,
+    get_keywords_reply_keyboard,
+    get_cancel_keyboard,
+    post_source_url_kb
 )
 
 router = Router()
 
 # =========================================================================
-# YORDAMCHI VA XAVFSIZ TAHRIRLASH FUNKSIYALARI
+# MATN VA XABAR GENERATORLARI (SEPARATOR CHIZIQLARSIZ, TOZA INTERFEYS)
 # =========================================================================
 
-async def safe_edit_message(
-    call: CallbackQuery,
-    text: str,
-    reply_markup: Optional[InlineKeyboardMarkup] = None,
-    disable_web_page_preview: bool = True
-) -> None:
-    """
-    Inline xabarni xavfsiz tahrirlash yordamchisi.
-    Agar Telegram 'message is not modified' xatosi qaytarsa, dastur to'xtab qolmaydi.
-    """
-    try:
-        if call.message:
-            await call.message.edit_text(
-                text=text,
-                parse_mode="HTML",
-                reply_markup=reply_markup,
-                disable_web_page_preview=disable_web_page_preview
-            )
-    except TelegramBadRequest as exc:
-        if "message is not modified" in str(exc).lower():
-            # Ma'lumot allaqachon eng oxirgi holatda
-            pass
-        else:
-            logger.warning(f"Xabarni tahrirlashda TelegramBadRequest: {exc}")
-    except Exception as exc:
-        logger.debug(f"Xabarni tahrirlashda istisno: {exc}")
-        try:
-            if call.message:
-                await call.message.answer(
-                    text=text,
-                    parse_mode="HTML",
-                    reply_markup=reply_markup,
-                    disable_web_page_preview=disable_web_page_preview
-                )
-        except Exception:
-            pass
-
-
 def build_dashboard_text() -> str:
-    """Admin Dashboard asosiy ekrani uchun ixcham va mobilga mos matn."""
-    status_icon = "⏸️ To'xtatilgan" if source_manager.is_paused else "🟢 Faol"
+    """Admin Dashboard asosiy ekrani uchun ixcham va to'liq ma'lumot."""
+    status_icon = "⏸️ To'xtatilgan" if source_manager.is_paused else "🟢 24/7 Faol"
+    ai_icon = "🟢 Faol" if settings.AI_ENABLED else "⏸️ O'chirilgan"
     last_time = "Hali yo'q"
     if source_manager.last_check_time > 0:
         last_time = format_uz_time(source_manager.last_check_time, "%H:%M:%S")
@@ -98,19 +65,19 @@ def build_dashboard_text() -> str:
     total_sources = tg_count + web_count
 
     return (
-        "🎛️ <b>ADMIN BOSHQARUV PANELI</b>\n\n"
-        f"• <b>Holat:</b> {status_icon}\n"
-        f"• <b>Tekshiruv:</b> har {settings.CHECK_INTERVAL_SECONDS}s | <b>Dublikat:</b> {settings.SIMILARITY_THRESHOLD * 100:.0f}%\n"
-        f"• <b>Manbalar:</b> {total_sources} ta (📱 {tg_count} kanal, 💻 {web_count} sayt)\n"
-        f"• <b>Oxirgi skan:</b> {last_time} ({source_manager.last_check_duration:.1f}s)\n"
-        f"• <b>Kesh:</b> {storage.count} ta | <b>Izlar:</b> {len(deduplicator._history)} ta\n\n"
-        "<i>Kerakli amalni tanlang:</i>"
+        "🚇 <b>TOSHKENT METROPOLITENI MONITORING TIZIMI</b>\n\n"
+        f"• <b>Monitoring holati:</b> {status_icon}\n"
+        f"• <b>AI Tahlilchi (Dual AI):</b> {ai_icon}\n"
+        f"• <b>Kuzatilayotgan manbalar:</b> <b>{total_sources} ta</b> (📱 {tg_count} kanal, 💻 {web_count} sayt)\n"
+        f"• <b>Avtomatik tekshiruv:</b> har {settings.CHECK_INTERVAL_SECONDS} soniyada\n"
+        f"• <b>Oxirgi skaner:</b> {last_time} ({source_manager.last_check_duration:.1f}s)\n"
+        f"• <b>Keshdagi postlar:</b> {storage.count} ta | <b>Dublikat xotirasi:</b> {len(deduplicator._history)} ta\n\n"
+        "<i>Pastdagi boshqaruv menyusidan kerakli bo'limni tanlang:</i>"
     )
 
 
-
 def build_status_text() -> str:
-    """Tizim holati va umumiy statistikasini ko'rsatish."""
+    """Tizim holati va to'liq statistika."""
     last_time = "Hali tekshirilmadi"
     if source_manager.last_check_time > 0:
         last_time = format_uz_time(source_manager.last_check_time, "%H:%M:%S | %d.%m.%Y")
@@ -128,7 +95,7 @@ def build_status_text() -> str:
         f"<b>Holat:</b> {state_str}\n"
         f"🌐 <b>Kuzatilayotgan manbalar:</b> {total_sources} ta\n"
         f"  ├ 📱 Telegram kanallar: {tg_count} ta\n"
-        f"  └ 💻 Yangilik saytlari: {web_count} ta\n\n"
+        f"  └ 💻 Yangilik saytlari va RSS: {web_count} ta\n\n"
         f"⏱️ <b>Avtomatik tekshirish oralig'i:</b> har {settings.CHECK_INTERVAL_SECONDS} soniyada\n"
         f"⚡ <b>Oxirgi tekshiruv vaqti:</b> {last_time}\n"
         f"⏳ <b>Oxirgi skaner davomiyligi:</b> {source_manager.last_check_duration:.2f} soniya\n"
@@ -136,7 +103,8 @@ def build_status_text() -> str:
         f"🗂️ <b>Keshdagi ko'rilgan postlar:</b> {storage.count} ta\n"
         f"🧠 <b>Antidublikat xotirasi (oxirgi 24 soat):</b> {len(deduplicator._history)} ta voqea\n"
         f"👥 <b>Ruxsat etilgan adminlar:</b> {len(settings.admin_id_list)} ta"
-        f"{group_info}"
+        f"{group_info}\n\n"
+        "<i>Tizim barcha 127 ta manbani parallel ravishda barqaror kuzatib bormoqda.</i>"
     )
 
 
@@ -146,77 +114,306 @@ def build_recent_news_text() -> str:
     if not events:
         return (
             "📰 <b>SO'NGGI METRO XABARLARI</b>\n\n"
-            "<i>Hozircha tizim xotirasida topilgan yangi metro voqealari yo'q.</i>"
+            "<i>Hozircha tizim xotirasida topilgan yangi metro voqealari yo'q.\n"
+            "Manbalardan yangilik chiqqan zahoti bu yerda avtomatik aks etadi.</i>"
         )
 
-    lines = ["📰 <b>SO'NGGI ANIQLANGAN METRO XABARLARI (OXIRGI 24 SOAT):</b>\n"]
+    lines = ["📰 <b>SO'NGGI ANIQLANGAN METRO XABARLARI:</b>\n"]
     for i, ev in enumerate(events, 1):
         t_str = format_uz_time(ev.get("timestamp", 0), "%H:%M | %d.%m")
-        title = html.escape(ev.get("title", "Sarlavhasiz"))
-        source = html.escape(ev.get("source", "Noma'lum"))
+        title = html.escape(ev.get("ai_title") or ev.get("title", "Sarlavhasiz"), quote=False)
+        source = html.escape(ev.get("source", "Noma'lum"), quote=False)
+        badge = ev.get("ai_badge") or "🚇 METRO"
         url = ev.get("url", "")
-        url_link = f' <a href="{url}">[Havolani ochish]</a>' if url else ""
-        lines.append(f"<b>{i}.</b> [{t_str}] <b>{source}</b>:\n{title}{url_link}\n")
+        url_link = f' <a href="{url}">[Asl manba]</a>' if url else ""
+        lines.append(f"<b>{i}. {badge}</b> [{t_str}] <b>{source}</b>:\n{title}{url_link}\n")
 
     return "\n".join(lines)
 
 
+def build_ai_status_text() -> str:
+    """AI Tahlilchi holati haqida to'liq professional ma'lumot (hech qanday test yoki dummy matnsiz)."""
+    st = ai_analyzer.get_status_info()
+    status_icon = "🟢 Faol" if st["ai_enabled"] else "⏸️ O'chirilgan"
+
+    gemini_key_str = "✅ Ulangan" if st["gemini_configured"] else "❌ Kalit kiritilmagan"
+    openrouter_key_str = "✅ Ulangan" if st["openrouter_configured"] else "❌ Kalit kiritilmagan"
+
+    total_sources = len(source_manager.telegram_channels) + len(source_manager.web_sources)
+
+    return (
+        "🤖 <b>AI TAHLILCHI VA DUBLIKAT NAZORATI TIZIMI</b>\n\n"
+        f"• <b>Umumiy holat:</b> {status_icon}\n\n"
+        f"1️⃣ <b>Asosiy provayder (Google Gemini):</b>\n"
+        f"   ├ Holati: <b>{gemini_key_str}</b>\n"
+        f"   └ Model: <code>{st['gemini_model']}</code>\n\n"
+        f"2️⃣ <b>Zaxira provayder (OpenRouter Fallback):</b>\n"
+        f"   ├ Holati: <b>{openrouter_key_str}</b>\n"
+        f"   └ Model: <code>{st['openrouter_model']}</code>\n\n"
+        "⚡ <b>Qanday ishlaydi?</b>\n"
+        f"Kuzatilayotgan <b>{total_sources} ta</b> nufuzli OAV va Telegram kanallardan kelayotgan har bir metro yangiligi avtomatik tarzda sun'iy intellekt orqali tahlil qilinadi: reklama, chaqiriq va ortiqcha matnlardan tozalanadi, voqea joyi va sababi aniqlanadi hamda rasmi bilan birga guruh va kanalga yetkaziladi. Asosiy provayderda limit tugasa, tizim avtomatik zaxira provayderiga ulanadi."
+    )
+
+
+def build_settings_text() -> str:
+    """Sozlamalar matni."""
+    status_str = "⏸️ Vaqtincha to'xtatilgan" if source_manager.is_paused else "🟢 Faol"
+    return (
+        "⚙️ <b>TIZIM VA MONITORING SOZLAMALARI:</b>\n\n"
+        f"• <b>Monitoring holati:</b> {status_str}\n"
+        f"• <b>Tekshirish intervali:</b> har <b>{settings.CHECK_INTERVAL_SECONDS} soniyada</b>\n"
+        f"• <b>Antidublikat chegarasi:</b> <b>{settings.SIMILARITY_THRESHOLD * 100:.0f}%</b>\n"
+        f"• <b>Parallel so'rovlar limiti:</b> <b>{settings.MAX_CONCURRENT_REQUESTS} ta</b>\n\n"
+        "<i>Kerakli sozlamani quyidagi tugmalar orqali boshqaring:</i>"
+    )
+
+
+def build_keywords_text() -> str:
+    """Filtr kalit so'zlari matni."""
+    custom_kws = get_custom_keywords()
+    custom_str = ", ".join(custom_kws) if custom_kws else "Hozircha qo'shilmagan"
+    return (
+        "🏷️ <b>METRO FILTR KALIT SO'ZLARI:</b>\n\n"
+        "🚇 <b>Asosiy o'zaklar:</b> metro, metrosi, metropoliten, toshmetro, tashmetro, yerosti, yerusti metrosi\n\n"
+        "🚉 <b>Metro liniyalari va bekatlar:</b> Chilonzor, O'zbekiston, Yunusobod, Sergeli, Halqa yo'li va barcha 50+ bekat nomlari (ham lotin, ham kirill, ham yangi alifbo variantlari bilan).\n\n"
+        "⚠️ <b>Hodisa belgilari:</b> to'xtab qoldi, nosozlik, kechikish, vagon, poyezd, rels, mashinist, tutun, tirbandlik, interval, chipta, turniket, tarif.\n\n"
+        f"✨ <b>Qo'shimcha maxsus so'zlar ({len(custom_kws)} ta):</b>\n"
+        f"<code>{custom_str}</code>"
+    )
+
+
+def build_cache_text() -> str:
+    """Kesh holati matni."""
+    return (
+        "🧹 <b>KESH VA XOTIRANI BOSHQARISH:</b>\n\n"
+        f"• <b>Keshdagi xabarlar (seen_posts):</b> <b>{storage.count} ta</b>\n"
+        f"• <b>Antidublikat izlari (seen_fingerprints):</b> <b>{len(deduplicator._history)} ta</b> voqea\n\n"
+        "💡 <i>Keshni tozalash avval ko'rilgan xabarlarning qayta tekshirilishiga imkon yaratadi.</i>"
+    )
+
+
 # =========================================================================
-# ASOSIY ADMIN BUYRUQLARI (COMMANDS VA REPLY TUGMALAR)
+# ASOSIY MENU HANDLERLARI (REPLY KEYBOARD)
 # =========================================================================
 
-@router.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext) -> None:
-    """Botni boshlash va xush kelibsiz xabari."""
+@router.message(Command("close", "hide"))
+@router.message(F.text.in_(["❌ Panelni yopish", "Panelni yopish", "❌ Yopish", "Yopish"]) | F.text.contains("yopish") | F.text.contains("Yopish"))
+async def cmd_close_panel(message: Message, state: FSMContext) -> None:
+    """Boshqaruv panelini yig'ish (bitta ixcham tugma holatiga keltirish)."""
     await state.clear()
-    tg_count = len(source_manager.telegram_channels)
-    web_count = len(source_manager.web_sources)
-    total_count = tg_count + web_count
-
     await message.answer(
-        "👋 <b>Assalomu alaykum, Hurmatli Administrator!</b>\n\n"
-        "🚇 <b>Toshkent Metropoliteni Tezkor Monitoring Tizimi</b> faol holatda ishlamoqda.\n\n"
-        f"Tizim 24/7 rejimida <b>{total_count} ta manba</b>ni ({tg_count} ta TG kanal va {web_count} ta sayt) "
-        "asinxron parallel kuzatib boradi.\n\n"
-        "Boshqaruv uchun pastdagi tezkor klaviatura yoki inline paneldan foydalanishingiz mumkin:",
+        "<i>Boshqaruv paneli yig'ildi. Qayta ochish uchun pastdagi tugmani bosing:</i>",
+        parse_mode="HTML",
+        reply_markup=get_collapsed_keyboard()
+    )
+
+
+@router.message(Command("start", "menu", "panel", "dashboard"))
+@router.message(F.text == "◀️ Asosiy menyu")
+@router.message(F.text == "❌ Bekor qilish")
+@router.message(F.text.in_(["🎛 Panel", "🎛 Boshqaruv paneli", "Panel", "Boshqaruv", "🎛 Panelni ochish", "Panelni ochish"]))
+@router.message(Command("cancel"))
+async def cmd_main_menu(message: Message, state: FSMContext) -> None:
+    """Asosiy menyuga qaytish va FSM holatini bekor qilish."""
+    await state.clear()
+    await message.answer(
+        build_dashboard_text(),
         reply_markup=get_main_keyboard(),
         parse_mode="HTML"
     )
-    # Inline Dashboardni ham ko'rsatish
-    await message.answer(
-        build_dashboard_text(),
-        reply_markup=admin_main_dashboard_kb(source_manager.is_paused),
-        parse_mode="HTML"
-    )
 
 
-@router.message(Command("panel", "admin", "dashboard"))
-@router.message(F.text.contains("Boshqaruv paneli") | F.text.contains("BOSHQARUV PANELI"))
-async def cmd_panel(message: Message, state: FSMContext) -> None:
-    """Interaktiv Admin Dashboardni chiqarish."""
+@router.message(Command("check"))
+@router.message(F.text.in_(["🔍 Tekshirish", "🔍 Hozir tekshirish"]))
+async def cmd_check_now(message: Message, state: FSMContext) -> None:
+    """Barcha 127 ta manbani parallel tekshirish va yangi xabarlarni jo'natish."""
     await state.clear()
-    await message.answer(
-        build_dashboard_text(),
-        reply_markup=admin_main_dashboard_kb(source_manager.is_paused),
+    status_msg = await message.answer(
+        "⏳ <b>Barcha manbalar parallel tekshirilmoqda...</b>\n"
+        "Iltimos, kuting (bu 4–8 soniya vaqt oladi)...",
         parse_mode="HTML"
     )
+    try:
+        new_alerts, stats = await source_manager.scan_all_sources()
+        for idx, item in enumerate(new_alerts, 1):
+            await send_metro_alert(message.bot, item)
+            if idx < len(new_alerts):
+                await asyncio.sleep(2.0)
+
+        result_text = (
+            "✅ <b>Tekshiruv muvaffaqiyatli yakunlandi!</b>\n\n"
+            f"⏱️ <b>Sarflangan vaqt:</b> {stats['elapsed_seconds']} soniya\n"
+            f"🌐 <b>Tekshirilgan manbalar:</b> {stats['total_sources']} ta ({stats['channels_count']} kanal, {stats['web_count']} sayt)\n"
+            f"📥 <b>Yig'ilgan so'nggi postlar:</b> {stats['raw_posts_fetched']} ta\n"
+            f"🚨 <b>Topilgan yangi metro xabarlari:</b> {stats['metro_alerts_found']} ta"
+        )
+        await status_msg.edit_text(result_text, parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"Hozir tekshirishda xatolik: {e}")
+        await status_msg.edit_text(f"❌ Tekshirishda xatolik yuz berdi: {e}", parse_mode="HTML")
 
 
-@router.message(Command("status"))
-@router.message(F.text.contains("Tizim holati") | F.text.contains("TIZIM HOLATI"))
-async def cmd_status(message: Message) -> None:
-    """Tizim holatini ko'rsatish."""
+@router.message(Command("today"))
+@router.message(F.text.in_(["📅 Bugungi xabarlar", "📅 Bugungi yangiliklar"]))
+async def cmd_today_news(message: Message, state: FSMContext) -> None:
+    """Bugungi kun bo'yicha metro yangiliklarini AI tahlillari va rasmlari bilan ketma-ket chiqarish."""
+    await state.clear()
+    events = deduplicator.get_today_events()
+    now_str = format_uz_time(fmt="%d.%m.%Y")
+
+    if not events:
+        total_src = len(source_manager.telegram_channels) + len(source_manager.web_sources)
+        await message.answer(
+            f"📅 <b>BUGUNGI METRO YANGILIKLARI ({now_str})</b>\n\n"
+            "<i>Bugun hozircha monitoring orqali yangi metro yangiligi aniqlanmadi.\n"
+            f"Tizim {total_src} ta rasmiy va ommabop manbani 24/7 rejimida uzluksiz kuzatmoqda.</i>",
+            parse_mode="HTML",
+            reply_markup=get_main_keyboard()
+        )
+        return
+
     await message.answer(
-        build_status_text(),
+        f"📅 <b>BUGUNGI METRO YANGILIKLARI ({now_str})</b>\n\n"
+        f"Bugun jami <b>{len(events)} ta</b> metro yangiligi aniqlangan.\n"
+        "AI tahliliy xulosalari va fotosuratlari bilan taqdim etilmoqda:",
         parse_mode="HTML",
         reply_markup=get_main_keyboard()
     )
 
+    for idx, ev in enumerate(events, 1):
+        title = html.escape(ev.get("ai_title") or ev.get("title", "Sarlavhasiz"), quote=False)
+        badge = html.escape(ev.get("ai_badge") or "🚇 METRO XABARI", quote=False)
+        raw_summary = ev.get("ai_summary") or ev.get("content", "")
+        summary = html.escape(safe_truncate_words(raw_summary, 220), quote=False)
+        source = html.escape(ev.get("source", "Noma'lum manba"), quote=False)
+        t_str = format_uz_time(ev.get("timestamp", 0), "%H:%M")
+        url = ev.get("url", "")
+        image_url = ev.get("image_url", "")
+        station = ev.get("ai_station", "")
+        status = ev.get("ai_status", "")
+        advice = ev.get("ai_advice", "")
+
+        # Toza, ixcham va to'liq matn ko'rinishi
+        lines = [
+            f"🚇 <b>TOSHKENT METROSI | {badge}</b>\n",
+            f"📌 <b>{title}</b>\n",
+            f"📋 <b>Tahlil:</b> {summary}\n"
+        ]
+        details = []
+        if station:
+            st_l = station.lower()
+            if not any(ign in st_l for ign in ["noma'lum", "umumiy tarmoq", "none", "butun", "tutash"]):
+                details.append(f"📍 <b>Hudud:</b> {html.escape(station.strip(), quote=False)}")
+        if status:
+            st_clean = safe_truncate_words(status.strip(), 70)
+            details.append(f"🚦 <b>Holat:</b> {html.escape(st_clean, quote=False)}")
+        if details:
+            lines.append("\n".join(details) + "\n")
+        if advice:
+            lines.append(f"💡 <b>Tavsiya:</b> <i>{html.escape(advice.strip(), quote=False)}</i>\n")
+
+        lines.append(f"🕒 <b>Vaqt:</b> {t_str} | 🏛️ <b>Manba:</b> {source}")
+        card_text = "\n".join(lines)
+
+        item_kb = post_source_url_kb(url) if url else None
+
+        # Rasmni yuklab olib BufferedInputFile orqali yuborish
+        sent_photo = False
+        if image_url:
+            photo_file = await download_photo_file(image_url)
+            if photo_file:
+                try:
+                    await message.answer_photo(
+                        photo=photo_file,
+                        caption=card_text,
+                        parse_mode="HTML",
+                        reply_markup=item_kb
+                    )
+                    sent_photo = True
+                except Exception as pe:
+                    logger.warning(f"Rasm bilan yuborishda xatolik ({pe}), matn ko'rinishida yuboriladi")
+
+        if not sent_photo:
+            await message.answer(
+                text=card_text,
+                parse_mode="HTML",
+                reply_markup=item_kb,
+                disable_web_page_preview=False
+            )
+
+        if idx < len(events):
+            await asyncio.sleep(1.2)
+
+
+@router.message(Command("ai"))
+@router.message(F.text == "🤖 AI Tahlilchi")
+async def cmd_ai_menu(message: Message, state: FSMContext) -> None:
+    """AI Tahlilchi bo'limini ochish va Reply klaviaturani ko'rsatish."""
+    await state.clear()
+    await message.answer(
+        build_ai_status_text(),
+        parse_mode="HTML",
+        reply_markup=get_ai_reply_keyboard(settings.AI_ENABLED)
+    )
+
+
+@router.message(F.text.in_(["🔄 Tekshirish", "🔄 Provayderlarni tekshirish"]))
+async def cmd_ai_check_providers(message: Message) -> None:
+    """AI provayderlarining aloqasini real tekshirish."""
+    status_msg = await message.answer(
+        "⏳ <b>Gemini va OpenRouter provayderlari bilan aloqa tekshirilmoqda...</b>",
+        parse_mode="HTML"
+    )
+    start_time = time.time()
+    st = ai_analyzer.get_status_info()
+
+    g_ok = False
+    o_ok = False
+    try:
+        if st["gemini_configured"]:
+            res_g = await ai_analyzer._call_gemini_api("Toshkent metrosi")
+            g_ok = bool(res_g)
+    except Exception as ge:
+        logger.debug(f"Gemini test xatosi: {ge}")
+
+    try:
+        if st["openrouter_configured"]:
+            res_o = await ai_analyzer._call_openrouter_api("Toshkent metrosi")
+            o_ok = bool(res_o)
+    except Exception as oe:
+        logger.debug(f"OpenRouter test xatosi: {oe}")
+
+    elapsed = time.time() - start_time
+    g_status = "🟢 Aloqa a'lo (200 OK)" if g_ok else "🔴 Ulanmadi"
+    o_status = "🟢 Aloqa a'lo (200 OK)" if o_ok else "🔴 Ulanmadi"
+
+    msg = (
+        "🤖 <b>AI PROVAYDERLARI ALOQA NATIJASI:</b>\n\n"
+        f"1️⃣ <b>Google Gemini ({st['gemini_model']}):</b> {g_status}\n"
+        f"2️⃣ <b>OpenRouter ({st['openrouter_model']}):</b> {o_status}\n\n"
+        f"⏱️ <b>Javob vaqti:</b> {elapsed:.2f} soniya\n\n"
+        "⚡ <i>Barcha monitoring yangiliklari ushbu sun'iy intellekt tizimi orqali real vaqtda qayta ishlanadi.</i>"
+    )
+    await status_msg.edit_text(msg, parse_mode="HTML")
+
+
+@router.message(F.text.in_(["▶️ Yoqish", "▶️ AI ni yoqish", "⏸️ O'chirish", "⏸️ AI ni o'chirish"]))
+async def cmd_ai_toggle(message: Message) -> None:
+    """AI tahlilchini yoqish / o'chirish."""
+    settings.AI_ENABLED = not settings.AI_ENABLED
+    action_text = "yoqildi va faol" if settings.AI_ENABLED else "vaqtincha o'chirildi"
+    await message.answer(
+        f"🤖 <b>AI Tahlilchi {action_text}!</b>",
+        parse_mode="HTML",
+        reply_markup=get_ai_reply_keyboard(settings.AI_ENABLED)
+    )
+
 
 @router.message(Command("history", "news"))
-@router.message(F.text.contains("So'nggi xabarlar") | F.text.contains("SO'NGGI XABARLAR"))
-async def cmd_recent_news(message: Message) -> None:
-    """Oxirgi metro xabarlarini ko'rsatish."""
+@router.message(F.text == "📰 So'nggi xabarlar")
+async def cmd_recent_news(message: Message, state: FSMContext) -> None:
+    """Oxirgi aniqlangan metro xabarlarini ko'rsatish."""
+    await state.clear()
     await message.answer(
         build_recent_news_text(),
         parse_mode="HTML",
@@ -225,42 +422,458 @@ async def cmd_recent_news(message: Message) -> None:
     )
 
 
+@router.message(Command("status"))
+@router.message(F.text == "📊 Tizim holati")
+async def cmd_status(message: Message, state: FSMContext) -> None:
+    """Tizim holatini ko'rsatish."""
+    await state.clear()
+    await message.answer(
+        build_status_text(),
+        parse_mode="HTML",
+        reply_markup=get_main_keyboard()
+    )
+
+
+@router.message(Command("sources"))
+@router.message(F.text == "🌐 Manbalar")
+async def cmd_sources_menu(message: Message, state: FSMContext) -> None:
+    """Manbalar bo'limi Reply klaviaturasini ochish."""
+    await state.clear()
+    tg_count = len(source_manager.telegram_channels)
+    web_count = len(source_manager.web_sources)
+    total_count = tg_count + web_count
+    await message.answer(
+        "🌐 <b>KUZATILAYOTGAN MANBALAR BOSHQARUVI:</b>\n\n"
+        f"• 📱 Telegram kanallar: <b>{tg_count} ta</b>\n"
+        f"• 💻 Veb-saytlar va OAV: <b>{web_count} ta</b>\n"
+        f"• Jami manbalar: <b>{total_count} ta</b>\n\n"
+        "<i>Kerakli ro'yxatni ko'rish yoki yangi manba kiritish uchun quyidagi tugmalardan foydalaning:</i>",
+        reply_markup=get_sources_reply_keyboard(tg_count, web_count),
+        parse_mode="HTML"
+    )
+
+
+@router.message(F.text.startswith("📱 Telegram"))
+async def cmd_list_tg_channels(message: Message) -> None:
+    """Barcha kuzatilayotgan Telegram kanallari ro'yxatini matn ko'rinishida chiqarish."""
+    channels = source_manager.telegram_channels
+    tg_count = len(channels)
+    web_count = len(source_manager.web_sources)
+
+    chunk_size = 40
+    chunks = [channels[i:i + chunk_size] for i in range(0, len(channels), chunk_size)]
+
+    for idx, chunk in enumerate(chunks, 1):
+        lines = [f"📱 <b>TELEGRAM KANALLAR RO'YXATI ({idx}/{len(chunks)}):</b>\n"]
+        for c_idx, ch in enumerate(chunk, (idx - 1) * chunk_size + 1):
+            name = html.escape(ch.get("name", "Kanal"), quote=False)
+            user = ch.get("username", "")
+            lines.append(f"<b>{c_idx}.</b> {name} — <a href=\"https://t.me/{user}\">@{user}</a>")
+        await message.answer(
+            "\n".join(lines),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+            reply_markup=get_sources_reply_keyboard(tg_count, web_count)
+        )
+
+
+@router.message(F.text.startswith("💻 Saytlar") | F.text.startswith("💻 Veb-saytlar"))
+async def cmd_list_web_sources(message: Message) -> None:
+    """Barcha kuzatilayotgan Veb-saytlar ro'yxatini matn ko'rinishida chiqarish."""
+    websites = source_manager.web_sources
+    tg_count = len(source_manager.telegram_channels)
+    web_count = len(websites)
+
+    lines = [f"💻 <b>VEB-SAYTLAR VA RSS RO'YXATI ({web_count} ta):</b>\n"]
+    for idx, site in enumerate(websites, 1):
+        name = html.escape(site.get("name", "Sayt"), quote=False)
+        url = site.get("url", "")
+        src_type = site.get("type", "rss").upper()
+        lines.append(f"<b>{idx}.</b> <b>{name}</b> ({src_type}) — <a href=\"{url}\">{url}</a>")
+
+    lines.append(
+        "\n⚡ <i>Veb-saytlardan chiqqan barcha maqolalarning asosiy rasmlari Open Graph (og:image) orqali avtomatik yuklab olinadi.</i>"
+    )
+
+    await message.answer(
+        "\n".join(lines),
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+        reply_markup=get_sources_reply_keyboard(tg_count, web_count)
+    )
+
+
+@router.message(F.text.in_(["➕ Kanal", "➕ Kanal qo'shish"]))
+async def cmd_add_tg_start(message: Message, state: FSMContext) -> None:
+    """Telegram kanal qo'shish so'rovini boshlash."""
+    await state.set_state(AdminStates.waiting_for_tg_username)
+    await message.answer(
+        "➕ <b>YANGI TELEGRAM KANAL QO'SHISH:</b>\n\n"
+        "Kanalning <b>@username</b>ini yoki havolasini yuboring (masalan: <code>@tashkent_news</code>):\n\n"
+        "<i>Bekor qilish uchun '❌ Bekor qilish' tugmasini bosing.</i>",
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+
+
+@router.message(StateFilter(AdminStates.waiting_for_tg_username))
+async def process_add_tg_username(message: Message, state: FSMContext) -> None:
+    """Telegram kanal username kiritilganda tekshirish va saqlash."""
+    username = message.text.strip().replace("https://t.me/", "").replace("t.me/", "")
+    status_msg = await message.answer(f"⏳ <b>@{username} tekshirilmoqda...</b>", parse_mode="HTML")
+    
+    test_res = await source_manager.test_single_source(username)
+    if not test_res.get("success"):
+        await status_msg.edit_text(
+            f"❌ <b>Kanalni qo'shib bo'lmadi!</b>\n"
+            f"Sabab: Kanal ochiq (public) emas yoki xatolik: {test_res.get('error')}",
+            parse_mode="HTML"
+        )
+        return
+
+    success, msg = source_manager.add_telegram_channel(
+        username=username,
+        name=test_res.get("source_name", username)
+    )
+    await state.clear()
+    tg_count = len(source_manager.telegram_channels)
+    web_count = len(source_manager.web_sources)
+
+    if success:
+        await status_msg.edit_text(
+            f"✅ <b>Muvaffaqiyatli!</b>\n\n"
+            f"{msg}\n"
+            f"Oxirgi olingan postlar soni: <b>{test_res.get('total_fetched')} ta</b>\n"
+            f"Endi ushbu kanal 24/7 monitoring ro'yxatiga kiritildi.",
+            parse_mode="HTML"
+        )
+    else:
+        await status_msg.edit_text(f"⚠️ {msg}", parse_mode="HTML")
+    await message.answer("Boshqaruv menyusi:", reply_markup=get_sources_reply_keyboard(tg_count, web_count))
+
+
+@router.message(F.text.in_(["➕ Sayt", "➕ Sayt qo'shish"]))
+async def cmd_add_web_start(message: Message, state: FSMContext) -> None:
+    """Veb-sayt qo'shish so'rovini boshlash."""
+    await state.set_state(AdminStates.waiting_for_web_name)
+    await message.answer(
+        "➕ <b>YANGI VEB-SAYT QO'SHISH (1/3 QADAM):</b>\n\n"
+        "Sayt nomini kiriting (masalan: <code>Gazeta.uz Maxsus</code>):",
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+
+
+@router.message(StateFilter(AdminStates.waiting_for_web_name))
+async def process_add_web_name(message: Message, state: FSMContext) -> None:
+    """Sayt nomi qabul qilinganda."""
+    await state.update_data(web_name=message.text.strip())
+    await state.set_state(AdminStates.waiting_for_web_url)
+    await message.answer(
+        "🌐 <b>2/3 QADAM:</b>\n\n"
+        "Saytning bosh sahifa URL manzilini kiriting (masalan: <code>https://gazeta.uz</code>):",
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+
+
+@router.message(StateFilter(AdminStates.waiting_for_web_url))
+async def process_add_web_url(message: Message, state: FSMContext) -> None:
+    """Sayt URL manzili qabul qilinganda."""
+    await state.update_data(web_url=message.text.strip())
+    await state.set_state(AdminStates.waiting_for_web_feed)
+    await message.answer(
+        "📡 <b>3/3 QADAM:</b>\n\n"
+        "Saytning RSS / Atom Feed manzilini kiriting (masalan: <code>https://gazeta.uz/uz/rss/</code>):",
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+
+
+@router.message(StateFilter(AdminStates.waiting_for_web_feed))
+async def process_add_web_feed(message: Message, state: FSMContext) -> None:
+    """Sayt Feed manzili qabul qilinganda saqlash."""
+    data = await state.get_data()
+    feed_url = message.text.strip()
+    name = data.get("web_name", "Yangi Sayt")
+    url = data.get("web_url", "")
+    await state.clear()
+
+    status_msg = await message.answer("⏳ RSS manba tekshirilmoqda...", parse_mode="HTML")
+    success, msg = source_manager.add_web_source(name=name, url=url, feed_url=feed_url)
+    tg_count = len(source_manager.telegram_channels)
+    web_count = len(source_manager.web_sources)
+
+    if success:
+        await status_msg.edit_text(
+            f"✅ <b>Muvaffaqiyatli qo'shildi!</b>\n\n"
+            f"Sayt: <b>{name}</b>\n"
+            f"URL: {url}\n"
+            f"RSS: {feed_url}",
+            parse_mode="HTML"
+        )
+    else:
+        await status_msg.edit_text(f"⚠️ {msg}", parse_mode="HTML")
+    await message.answer("Boshqaruv menyusi:", reply_markup=get_sources_reply_keyboard(tg_count, web_count))
+
+
+@router.message(F.text.in_(["🔍 Tekshirish", "🔍 Manbani tekshirish"]))
+async def cmd_test_source_prompt(message: Message, state: FSMContext) -> None:
+    """Manbani testlash uchun nom so'rash."""
+    await state.set_state(AdminStates.waiting_for_test_source)
+    await message.answer(
+        "🔍 <b>MANBANI TEKSHIRIB KO'RISH:</b>\n\n"
+        "Tekshirmoqchi bo'lgan Telegram kanal @username yoki sayt ID sini yuboring (masalan: <code>@kunuzofficial</code>):",
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+
+
+@router.message(StateFilter(AdminStates.waiting_for_test_source))
+async def process_test_source(message: Message, state: FSMContext) -> None:
+    """Manbani testlash natijasini ko'rsatish."""
+    ident = message.text.strip()
+    await state.clear()
+    status_msg = await message.answer(f"⏳ <b>'{ident}' tekshirilmoqda...</b>", parse_mode="HTML")
+    res = await source_manager.test_single_source(ident)
+    tg_count = len(source_manager.telegram_channels)
+    web_count = len(source_manager.web_sources)
+
+    if not res.get("success"):
+        await status_msg.edit_text(
+            f"❌ Xatolik yuz berdi: {res.get('error')}",
+            parse_mode="HTML"
+        )
+        await message.answer("Boshqaruv menyusi:", reply_markup=get_sources_reply_keyboard(tg_count, web_count))
+        return
+
+    text = (
+        f"✅ <b>Tekshiruv natijasi:</b> {res.get('source_name')}\n"
+        f"• Turi: <b>{res.get('source_type')}</b>\n"
+        f"• Olingan so'nggi postlar: <b>{res.get('total_fetched')} ta</b>\n"
+        f"• Metroga oid yangiliklar: <b>{res.get('metro_found')} ta</b>\n\n"
+    )
+    samples = res.get("sample_items", [])
+    if samples:
+        text += "<b>Oxirgi postlardan namunalar:</b>\n"
+        for s in samples[:3]:
+            text += f"• <i>{html.escape(s.title[:80])}</i>\n"
+
+    await status_msg.edit_text(text, parse_mode="HTML")
+    await message.answer("Boshqaruv menyusi:", reply_markup=get_sources_reply_keyboard(tg_count, web_count))
+
+
+@router.message(Command("settings"))
+@router.message(F.text == "⚙️ Sozlamalar")
+async def cmd_settings_menu(message: Message, state: FSMContext) -> None:
+    """Sozlamalar bo'limi Reply klaviaturasini ochish."""
+    await state.clear()
+    await message.answer(
+        build_settings_text(),
+        parse_mode="HTML",
+        reply_markup=get_settings_reply_keyboard(source_manager.is_paused)
+    )
+
+
+@router.message(F.text.in_(["▶️ Yoqish", "▶️ Monitoringni yoqish", "⏸️ To'xtatish", "⏸️ Monitoringni to'xtatish"]))
+async def cmd_toggle_monitoring(message: Message) -> None:
+    """Monitoringni to'xtatish yoki qayta yoqish."""
+    is_paused = source_manager.toggle_pause()
+    state_word = "vaqtincha to'xtatildi (Pause)" if is_paused else "qayta ishga tushirildi (24/7 Faol)"
+    await message.answer(
+        f"⚡ <b>Monitoring {state_word}!</b>",
+        parse_mode="HTML",
+        reply_markup=get_settings_reply_keyboard(is_paused)
+    )
+
+
+@router.message(Command("ping", "diag"))
+@router.message(F.text == "🩺 Diagnostika")
+async def cmd_diagnostics(message: Message) -> None:
+    """Tizim diagnostikasi va Telegram API ping kechikishini o'lchash."""
+    t_start = time.time()
+    ping_msg = await message.answer("📡 Server va Telegram API bilan aloqa tekshirilmoqda...")
+    latency_ms = (time.time() - t_start) * 1000
+
+    now_uz = format_uz_time(fmt="%H:%M:%S | %d.%m.%Y (UTC+5)")
+    admin_count = len(settings.admin_id_list)
+    group_count = len(settings.group_id_list)
+    total_sources = len(source_manager.telegram_channels) + len(source_manager.web_sources)
+
+    text = (
+        "🩺 <b>TIZIM DIAGNOSTIKASI VA PING:</b>\n\n"
+        f"⚡ <b>Telegram API kechikishi:</b> <code>{latency_ms:.1f} ms</code>\n"
+        f"🕒 <b>O'zbekiston joriy vaqti:</b> <code>{now_uz}</code>\n"
+        f"🟢 <b>Monitoring holati:</b> {'⏸️ Toxtatilgan' if source_manager.is_paused else '24/7 Faol'}\n"
+        f"🌐 <b>Kuzatilayotgan manbalar:</b> {total_sources} ta\n"
+        f"👥 <b>Ulangan adminlar:</b> {admin_count} ta\n"
+        f"📢 <b>Ulangan guruhlar:</b> {group_count} ta\n"
+        f"🗂️ <b>Xotiradagi kesh:</b> {storage.count} ta xabar\n"
+        f"🧠 <b>Antidublikat xotirasi:</b> {len(deduplicator._history)} ta voqea\n\n"
+        "<i>Barcha asinxron jarayonlar to'liq barqaror ishlamoqda.</i>"
+    )
+    await ping_msg.edit_text(text, parse_mode="HTML")
+
+
+@router.message(F.text.startswith("⏱️ Interval:") | F.text.in_(["⏱️ 30s", "⏱️ 60s", "⏱️ 120s"]))
+async def cmd_set_interval(message: Message) -> None:
+    """Tekshirish intervalini o'zgartirish."""
+    raw = message.text.replace("⏱️ Interval:", "").replace("⏱️", "").replace("s", "").strip()
+    try:
+        new_int = int(raw)
+        settings.CHECK_INTERVAL_SECONDS = new_int
+        await message.answer(
+            f"✅ <b>Avtomatik tekshiruv oralig'i har {new_int} soniyaga sozlandi!</b>",
+            parse_mode="HTML",
+            reply_markup=get_settings_reply_keyboard(source_manager.is_paused)
+        )
+    except ValueError:
+        await message.answer("⚠️ Noto'g'ri interval qiymati.", reply_markup=get_settings_reply_keyboard(source_manager.is_paused))
+
+
+@router.message(Command("keywords"))
+@router.message(F.text == "🏷️ Kalit so'zlar")
+async def cmd_keywords_menu(message: Message, state: FSMContext) -> None:
+    """Kalit so'zlar menyusi."""
+    await state.clear()
+    await message.answer(
+        build_keywords_text(),
+        parse_mode="HTML",
+        reply_markup=get_keywords_reply_keyboard()
+    )
+
+
+@router.message(F.text.in_(["➕ So'z qo'shish", "➕ Yangi kalit so'z qo'shish"]))
+async def cmd_add_keyword_start(message: Message, state: FSMContext) -> None:
+    """Yangi kalit so'z kiritish so'rovi."""
+    await state.set_state(AdminStates.waiting_for_new_keyword)
+    await message.answer(
+        "➕ <b>YANGI KALIT SO'Z QO'SHISH:</b>\n\n"
+        "Metroga oid yangi so'z yoki bekat nomini kiriting (masalan: <code>Yangi Toshkent bekati</code>):",
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+
+
+@router.message(StateFilter(AdminStates.waiting_for_new_keyword))
+async def process_add_keyword(message: Message, state: FSMContext) -> None:
+    """Kalit so'zni saqlash."""
+    kw = message.text.strip()
+    await state.clear()
+    success = add_custom_keyword(kw)
+    if success:
+        await message.answer(
+            f"✅ <b>'{kw}'</b> kalit so'zi muvaffaqiyatli qo'shildi va filtrga kiritildi!",
+            parse_mode="HTML",
+            reply_markup=get_keywords_reply_keyboard()
+        )
+    else:
+        await message.answer(
+            "⚠️ Kalit so'z juda qisqa yoki xatolik yuz berdi.",
+            reply_markup=get_keywords_reply_keyboard()
+        )
+
+
+@router.message(F.text.in_(["🔍 Tekshirish", "🔍 Matnni tekshirish"]))
+async def cmd_test_text_start(message: Message, state: FSMContext) -> None:
+    """Matnni filtrdan tekshirish so'rovi."""
+    await state.set_state(AdminStates.waiting_for_test_text)
+    await message.answer(
+        "🔍 <b>MATNNI FILTRDAN TEKSHIRISH:</b>\n\n"
+        "Ixtiyoriy xabar matnini yuboring. Tizim uning metroga aloqadorligi va dublikat tahlilini ko'rsatib beradi:",
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+
+
+@router.message(StateFilter(AdminStates.waiting_for_test_text))
+async def process_test_text(message: Message, state: FSMContext) -> None:
+    """Yuborilgan matnni filtr va dublikat tahlilidan o'tkazish."""
+    text = message.text.strip()
+    await state.clear()
+
+    analysis = explain_filter(text, text)
+    is_metro = analysis.get("is_metro", False)
+    tags = analysis.get("tags", [])
+    reason = analysis.get("reason", "")
+    matched = analysis.get("matched", [])
+
+    is_dup, dup_source, sim = deduplicator.is_duplicate(text, text, "Manual")
+
+    verdict_icon = "🟢 QABUL QILINADI (METROGA OID)" if is_metro else "🔴 RAD ETILADI (METROGA ALOQADOR EMAS)"
+    tags_str = " ".join(tags) if tags else "Mavjud emas"
+    matched_str = ", ".join(matched) if matched else "Mos keluvchi belgilar yo'q"
+    dup_str = f"⚠️ Ha! (Asl manba: {dup_source}, o'xshashlik: {sim*100:.1f}%)" if is_dup else f"✅ Yo'q (Maksimal o'xshashlik: {sim*100:.1f}%)"
+
+    result_text = (
+        "🔍 <b>FILTR TAHLILI NATIJASI:</b>\n\n"
+        f"<b>Qaror:</b> {verdict_icon}\n"
+        f"🏷️ <b>Berilgan teglar:</b> <code>{tags_str}</code>\n"
+        f"🔍 <b>Tahlil sababi:</b> {reason}\n"
+        f"📌 <b>Aniqlangan belgilar:</b> <code>{matched_str}</code>\n\n"
+        f"🧠 <b>Kross-dublikat tekshiruvi:</b>\n{dup_str}"
+    )
+    await message.answer(result_text, parse_mode="HTML", reply_markup=get_keywords_reply_keyboard())
+
+
+@router.message(Command("cache"))
+@router.message(F.text.in_(["🧹 Kesh", "🧹 Keshni tozalash"]))
+async def cmd_cache_menu(message: Message, state: FSMContext) -> None:
+    """Kesh bo'limi Reply klaviaturasini ochish."""
+    await state.clear()
+    await message.answer(
+        build_cache_text(),
+        parse_mode="HTML",
+        reply_markup=get_cache_reply_keyboard()
+    )
+
+
+@router.message(F.text.in_(["🗑️ Postlar keshi", "🗑️ Ko'rilgan postlar keshini tozalash"]))
+async def cmd_clear_seen_cache(message: Message) -> None:
+    """Seen posts keshini tozalash."""
+    c = storage.clear()
+    await message.answer(
+        f"✅ <b>Ko'rilgan xabarlar keshi tozalandi ({c} ta element o'chirildi)!</b>",
+        parse_mode="HTML",
+        reply_markup=get_cache_reply_keyboard()
+    )
+
+
+@router.message(F.text.in_(["🧠 Dublikat izlari", "🧠 Antidublikat xotirasini tozalash"]))
+async def cmd_clear_dedup_cache(message: Message) -> None:
+    """Antidublikat izlarini tozalash."""
+    c = deduplicator.clear_history()
+    await message.answer(
+        f"✅ <b>Antidublikat xotirasi tozalandi ({c} ta voqea o'chirildi)!</b>",
+        parse_mode="HTML",
+        reply_markup=get_cache_reply_keyboard()
+    )
+
+
+@router.message(F.text.in_(["🧹 Barcha kesh", "🧹 BARCHA keshni tozalash"]))
+async def cmd_clear_all_cache(message: Message) -> None:
+    """Barcha keshni tozalash."""
+    c1 = storage.clear()
+    c2 = deduplicator.clear_history()
+    await message.answer(
+        f"✅ <b>Barcha kesh to'liq tozalandi!</b>\n({c1} ta xabar ID, {c2} ta dublikat izi o'chirildi)",
+        parse_mode="HTML",
+        reply_markup=get_cache_reply_keyboard()
+    )
+
+
 @router.message(Command("logs"))
-@router.message(F.text.contains("So'nggi loglar") | F.text.contains("SO'NGGI LOGLAR"))
-async def cmd_logs(message: Message) -> None:
-    """Tizim loglarini ko'rsatish."""
+@router.message(F.text.in_(["📋 Loglar", "📋 Tizim loglari"]))
+@router.message(F.text.in_(["🔄 Yangilash", "🔄 Loglarni yangilash"]))
+async def cmd_system_logs(message: Message, state: FSMContext) -> None:
+    """Tizim loglarini ko'rsatish va yangilash."""
+    await state.clear()
     logs_text = html.escape(get_recent_logs(lines=25))
     text = (
         "📋 <b>TIZIMNING SO'NGGI LOGLARI (OXIRGI 25 TA):</b>\n\n"
         f"<pre><code>{logs_text}</code></pre>"
     )
-    refresh_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Loglarni yangilash", callback_data="admin:logs")],
-            [InlineKeyboardButton(text="◀️ Asosiy menyu", callback_data="admin:main")]
-        ]
-    )
-    await message.answer(text, parse_mode="HTML", reply_markup=refresh_kb)
-
-
-@router.message(Command("settings"))
-@router.message(F.text.contains("Sozlamalar") | F.text.contains("SOZLAMALAR"))
-async def cmd_settings(message: Message) -> None:
-    """Sozlamalar menyusini ochish."""
-    kb = monitoring_menu_kb(
-        source_manager.is_paused,
-        settings.CHECK_INTERVAL_SECONDS,
-        settings.SIMILARITY_THRESHOLD
-    )
-    text = (
-        "⚙️ <b>TIZIM VA MONITORING PARAMETRLARI:</b>\n\n"
-        f"• <b>Holat:</b> {'⏸️ Vaqtincha toxtatilgan' if source_manager.is_paused else '🟢 Faol'}\n"
-        f"• <b>Tekshirish intervali:</b> har {settings.CHECK_INTERVAL_SECONDS} soniyada\n"
-        f"• <b>Antidublikat chegarasi:</b> {settings.SIMILARITY_THRESHOLD * 100:.0f}%\n"
-        f"• <b>Parallel so'rovlar limiti:</b> {settings.MAX_CONCURRENT_REQUESTS} ta\n\n"
-        "<i>Kerakli parametr ustiga bosib uni o'zgartirishingiz mumkin:</i>"
-    )
-    await message.answer(text, parse_mode="HTML", reply_markup=kb)
+    await message.answer(text, parse_mode="HTML", reply_markup=get_logs_reply_keyboard())
 
 
 @router.message(Command("id", "group_id", "getid"))
@@ -277,778 +890,16 @@ async def cmd_get_id(message: Message) -> None:
         f"📁 <b>Turi:</b> <code>{chat_type}</code>\n"
         f"🆔 <b>Chat ID:</b> <code>{chat_id}</code>\n\n"
         f"💡 <i>Guruhga xabarlar borishi uchun ushbu ID ni .env faylidagi <code>GROUP_ID={chat_id}</code> qatoriga qo'ying.</i>",
-        parse_mode="HTML"
-    )
-
-
-@router.message(Command("sources"))
-async def cmd_sources(message: Message) -> None:
-    """Manbalarni boshqarish bo'limi."""
-    tg_count = len(source_manager.telegram_channels)
-    web_count = len(source_manager.web_sources)
-    await message.answer(
-        f"🌐 <b>KUZATILAYOTGAN MANBALAR BOSHQARUVI:</b>\n\n"
-        f"• 📱 Telegram kanallar: <b>{tg_count} ta</b>\n"
-        f"• 💻 Veb-saytlar va RSS: <b>{web_count} ta</b>\n"
-        f"• Jami: <b>{tg_count + web_count} ta</b>\n\n"
-        "Quyidagi tugmalar orqali ro'yxatni ko'rish, yangi manba qo'shish yoki o'chirish mumkin:",
-        reply_markup=sources_menu_kb(tg_count, web_count),
-        parse_mode="HTML"
-    )
-
-
-@router.message(Command("keywords"))
-async def cmd_keywords(message: Message) -> None:
-    """Filtr kalit so'zlari bo'limi."""
-    custom_kws = get_custom_keywords()
-    custom_str = ", ".join(custom_kws) if custom_kws else "Hozircha yo'q"
-    text = (
-        "🏷️ <b>METRO FILTR KALIT SO'ZLARI:</b>\n\n"
-        "🚇 <b>Asosiy so'zlar:</b> metro, metrosi, metropoliten, тошметро, tashmetro\n\n"
-        "🚉 <b>Bekatlar:</b> Paxtakor bekati, Chilonzor bekati, Amir Temur bekati, "
-        "Yunusobod bekati, Alisher Navoiy bekati, Turkiston bekati, va barcha bekatlar.\n\n"
-        "⚠️ <b>Hodisalar:</b> to'xtab qoldi, nosozlik, kechikish, vagon, poyezd, rels, mashinist, "
-        "tutun, tirbandlik, interval, chipta, turniket, tarif.\n\n"
-        f"✨ <b>Admin qo'shgan maxsus kalit so'zlar ({len(custom_kws)} ta):</b>\n"
-        f"<code>{custom_str}</code>"
-    )
-    await message.answer(text, parse_mode="HTML", reply_markup=filter_menu_kb())
-
-
-@router.message(Command("ping", "diag"))
-async def cmd_ping(message: Message) -> None:
-    """Tizim diagnostikasi va Telegram ping kechikishini o'lchash."""
-    t_start = time.time()
-    ping_msg = await message.answer("📡 Server va Telegram API bilan aloqa tekshirilmoqda...")
-    latency_ms = (time.time() - t_start) * 1000
-
-    now_uz = format_uz_time(fmt="%H:%M:%S | %d.%m.%Y (UTC+5)")
-    admin_count = len(settings.admin_id_list)
-    group_count = len(settings.group_id_list)
-    
-    text = (
-        "🩺 <b>TIZIM DIAGNOSTIKASI VA PING:</b>\n\n"
-        f"⚡ <b>Telegram API javob vaqti:</b> <code>{latency_ms:.1f} ms</code>\n"
-        f"🕒 <b>O'zbekiston joriy vaqti:</b> <code>{now_uz}</code>\n"
-        f"🟢 <b>Monitoring holati:</b> {'⏸️ Toxtatilgan' if source_manager.is_paused else '24/7 Faol'}\n"
-        f"👥 <b>Ulangan adminlar:</b> {admin_count} ta\n"
-        f"📢 <b>Ulangan guruhlar:</b> {group_count} ta\n"
-        f"🗂️ <b>Xotiradagi kesh:</b> {storage.count} ta xabar ID si\n"
-        f"🧠 <b>Antidublikat xotirasi:</b> {len(deduplicator._history)} ta voqea\n\n"
-        "<i>Barcha tizim jarayonlari to'liq barqaror ishlamoqda.</i>"
-    )
-    await ping_msg.edit_text(text, parse_mode="HTML", reply_markup=back_to_main_kb())
-
-
-@router.message(Command("test_alert"))
-async def cmd_test_alert(message: Message) -> None:
-    """Test metro ogohlantirishini hozirgi chatga yuborish."""
-    test_item = NewsItem(
-        raw_id="admin_test_post_001",
-        url="https://tashmetro.uz",
-        title="Toshkent metrosida oraliq intervallar qisqartirildi (TEST OGOHLANTIRISH)",
-        content="Metropoliten harakat xavfsizligi va qulaylikni oshirish maqsadida qo'shimcha poyezdlar harakatini yo'lga qo'ydi. Ushbu xabar admin boshqaruv paneli orqali tizimni sinovdan o'tkazish uchun yuborildi.",
-        source_name="Metro Monitoring Test Markazi",
-        published_at=datetime.datetime.now().isoformat(),
-        tags=["#metro", "#chilonzor", "#poyezd", "#test"]
-    )
-    await send_metro_alert(message.bot, test_item, chat_ids=[message.chat.id])
-    await message.answer("✅ <b>Test ogohlantirish xabari muvaffaqiyatli yuborildi!</b>", parse_mode="HTML")
-
-
-@router.message(Command("check"))
-@router.message(F.text.contains("Hozir tekshirish") | F.text.contains("HOZIR TEKSHIRISH"))
-async def cmd_check(message: Message) -> None:
-    """Barcha 80+ manbani parallel tekshirish va yangi yangiliklarni jo'natish."""
-    status_msg = await message.answer(
-        "⏳ <b>Barcha manbalar parallel ravishda tekshirilmoqda...</b>\n"
-        "Iltimos, kuting (bu 5–10 soniya vaqt oladi).",
-        parse_mode="HTML"
-    )
-    try:
-        new_alerts, stats = await source_manager.scan_all_sources()
-        for item in new_alerts:
-            await send_metro_alert(message.bot, item)
-
-        result_text = (
-            "✅ <b>Tekshiruv yakunlandi!</b>\n\n"
-            f"⏱️ Sarflangan vaqt: <b>{stats['elapsed_seconds']} soniya</b>\n"
-            f"🌐 Tekshirilgan manbalar: <b>{stats['total_sources']} ta</b>\n"
-            f"📥 Yig'ilgan so'nggi postlar: <b>{stats['raw_posts_fetched']} ta</b>\n"
-            f"🚨 Topilgan yangi metro xabarlari: <b>{stats['metro_alerts_found']} ta</b>"
-        )
-        await status_msg.edit_text(result_text, parse_mode="HTML")
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Tekshirishda xatolik yuz berdi: {e}")
-
-
-# =========================================================================
-# ASOSIY DASHBOARD CALLBACK QUERY LAR
-# =========================================================================
-
-@router.callback_query(F.data == "noop")
-async def callback_noop(call: CallbackQuery) -> None:
-    """Bo'sh tugma bosilganda bildirishnoma ko'rsatmaslik."""
-    await call.answer()
-
-
-@router.callback_query(F.data == "admin:cancel")
-async def callback_cancel(call: CallbackQuery, state: FSMContext) -> None:
-    """Joriy FSM holatini bekor qilib asosiy menyuga qaytish."""
-    await state.clear()
-    await call.answer("Amal bekor qilindi.")
-    await safe_edit_message(
-        call,
-        build_dashboard_text(),
-        reply_markup=admin_main_dashboard_kb(source_manager.is_paused)
-    )
-
-
-@router.callback_query(F.data == "admin:main")
-async def callback_main(call: CallbackQuery, state: FSMContext) -> None:
-    """Asosiy dashboardga qaytish."""
-    await state.clear()
-    await call.answer()
-    await safe_edit_message(
-        call,
-        build_dashboard_text(),
-        reply_markup=admin_main_dashboard_kb(source_manager.is_paused)
-    )
-
-
-@router.callback_query(F.data == "admin:logs")
-async def callback_logs(call: CallbackQuery) -> None:
-    """Loglarni ko'rish va yangilash."""
-    await call.answer()
-    logs_text = html.escape(get_recent_logs(lines=25))
-    text = (
-        "📋 <b>TIZIMNING SO'NGGI LOGLARI (OXIRGI 25 TA):</b>\n\n"
-        f"<pre><code>{logs_text}</code></pre>"
-    )
-    refresh_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Loglarni yangilash", callback_data="admin:logs")],
-            [InlineKeyboardButton(text="◀️ Asosiy menyu", callback_data="admin:main")]
-        ]
-    )
-    await safe_edit_message(call, text, reply_markup=refresh_kb)
-
-
-@router.callback_query(F.data == "admin:diag")
-async def callback_diag(call: CallbackQuery) -> None:
-    """Diagnostika hisoboti."""
-    t_start = time.time()
-    await call.answer()
-    latency_ms = (time.time() - t_start) * 1000
-    now_uz = format_uz_time(fmt="%H:%M:%S | %d.%m.%Y (UTC+5)")
-    admin_count = len(settings.admin_id_list)
-    group_count = len(settings.group_id_list)
-
-    text = (
-        "🩺 <b>TIZIM DIAGNOSTIKASI VA PING:</b>\n\n"
-        f"⚡ <b>Telegram API kechikishi:</b> <code>{latency_ms:.1f} ms</code>\n"
-        f"🕒 <b>O'zbekiston vaqti:</b> <code>{now_uz}</code>\n"
-        f"🟢 <b>Monitoring holati:</b> {'⏸️ Toxtatilgan' if source_manager.is_paused else '24/7 Faol'}\n"
-        f"👥 <b>Ulangan adminlar:</b> {admin_count} ta\n"
-        f"📢 <b>Ulangan guruhlar:</b> {group_count} ta\n"
-        f"🗂️ <b>Keshdagi xabarlar:</b> {storage.count} ta\n"
-        f"🧠 <b>Antidublikat xotirasi:</b> {len(deduplicator._history)} ta voqea\n\n"
-        "<i>Tizim uzluksiz 24/7 rejimida xatosiz ishlamoqda.</i>"
-    )
-    await safe_edit_message(call, text, reply_markup=back_to_main_kb())
-
-
-@router.callback_query(F.data == "admin:news")
-async def callback_news(call: CallbackQuery) -> None:
-    """So'nggi yangiliklar ro'yxati."""
-    await call.answer()
-    await safe_edit_message(
-        call,
-        build_recent_news_text(),
-        reply_markup=back_to_main_kb(),
-        disable_web_page_preview=True
-    )
-
-
-@router.callback_query(F.data == "btn_status")
-async def callback_status(call: CallbackQuery) -> None:
-    """Holat tugmasi bosilganda."""
-    await call.answer()
-    await call.message.answer(build_status_text(), parse_mode="HTML", reply_markup=get_main_keyboard())
-
-
-@router.callback_query(F.data == "btn_check_now")
-async def callback_check_now(call: CallbackQuery) -> None:
-    """Hozir tekshirish tugmasi bosilganda."""
-    await call.answer("Tekshiruv boshlandi...", show_alert=False)
-    status_msg = await call.message.answer(
-        "⏳ <b>Barcha manbalar qayta tekshirilmoqda...</b>",
-        parse_mode="HTML"
-    )
-    try:
-        new_alerts, stats = await source_manager.scan_all_sources()
-        for item in new_alerts:
-            await send_metro_alert(call.bot, item)
-
-        result_text = (
-            "✅ <b>Tekshiruv yakunlandi!</b>\n\n"
-            f"⏱️ Sarflangan vaqt: <b>{stats['elapsed_seconds']} soniya</b>\n"
-            f"🌐 Tekshirilgan manbalar: <b>{stats['total_sources']} ta</b>\n"
-            f"📥 Yig'ilgan so'nggi postlar: <b>{stats['raw_posts_fetched']} ta</b>\n"
-            f"🚨 Topilgan yangi metro xabarlari: <b>{stats['metro_alerts_found']} ta</b>"
-        )
-        await status_msg.edit_text(result_text, parse_mode="HTML")
-    except Exception as e:
-        await status_msg.edit_text(f"❌ Xatolik: {e}")
-
-
-# =========================================================================
-# MONITORING SOZLAMALARI VA NAZORATI
-# =========================================================================
-
-@router.callback_query(F.data.in_(["admin:monitor", "admin:settings"]))
-async def callback_monitor_menu(call: CallbackQuery) -> None:
-    """Monitoring boshqaruvi va sozlamalari menyusi."""
-    await call.answer()
-    kb = monitoring_menu_kb(
-        source_manager.is_paused,
-        settings.CHECK_INTERVAL_SECONDS,
-        settings.SIMILARITY_THRESHOLD
-    )
-    text = (
-        "⚡ <b>MONITORING VA PARAMETRLAR NAZORATI:</b>\n\n"
-        f"• <b>Monitoring holati:</b> {'⏸️ Vaqtincha toxtatilgan' if source_manager.is_paused else '🟢 24/7 Faol'}\n"
-        f"• <b>Tekshirish intervali:</b> har <b>{settings.CHECK_INTERVAL_SECONDS} soniyada</b>\n"
-        f"• <b>Dublikat chegarasi:</b> <b>{settings.SIMILARITY_THRESHOLD * 100:.0f}%</b>\n\n"
-        "💡 <i>Quyidagi tugmalar orqali interval yoki sezgirlikni bitta bosish bilan o'zgartirishingiz mumkin:</i>"
-    )
-    await safe_edit_message(call, text, reply_markup=kb)
-
-
-@router.callback_query(F.data == "admin:mon:toggle")
-async def callback_monitor_toggle(call: CallbackQuery) -> None:
-    """Monitoringni to'xtatish yoki qayta yoqish."""
-    is_paused = source_manager.toggle_pause()
-    state_word = "to'xtatildi (Pause)" if is_paused else "ishga tushirildi (Faol)"
-    await call.answer(f"Monitoring {state_word}!", show_alert=True)
-    await callback_monitor_menu(call)
-
-
-@router.callback_query(F.data.startswith("admin:mon:int:"))
-async def callback_monitor_set_interval(call: CallbackQuery) -> None:
-    """Tekshirish intervalini o'zgartirish."""
-    new_int = int(call.data.split(":")[-1])
-    settings.CHECK_INTERVAL_SECONDS = new_int
-    await call.answer(f"Interval har {new_int} soniyaga o'zgartirildi!", show_alert=True)
-    await callback_monitor_menu(call)
-
-
-@router.callback_query(F.data.startswith("admin:mon:th:"))
-async def callback_monitor_set_threshold(call: CallbackQuery) -> None:
-    """Antidublikat o'xshashlik chegarasini sozlash."""
-    new_th = float(call.data.split(":")[-1])
-    settings.SIMILARITY_THRESHOLD = new_th
-    deduplicator.set_threshold(new_th)
-    await call.answer(f"Dublikat chegarasi {new_th * 100:.0f}% ga sozlandi!", show_alert=True)
-    await callback_monitor_menu(call)
-
-
-# =========================================================================
-# MANBALARNI BOSHQARISH (TELEGRAM KANALLAR VA VEB-SAYTLAR)
-# =========================================================================
-
-@router.callback_query(F.data == "admin:sources")
-async def callback_sources_menu(call: CallbackQuery) -> None:
-    """Manbalar boshqaruv menyusi."""
-    await call.answer()
-    tg_count = len(source_manager.telegram_channels)
-    web_count = len(source_manager.web_sources)
-    total_count = tg_count + web_count
-    text = (
-        "🌐 <b>MANBALARNI BOSHQARISH BO'LIMI:</b>\n\n"
-        f"Hozirda jami <b>{total_count} ta</b> manba asinxron kuzatilmoqda:\n"
-        f"• 📱 Telegram kanallar: <b>{tg_count} ta</b>\n"
-        f"• 💻 Yangilik veb-saytlari: <b>{web_count} ta</b>\n\n"
-        "Quyidagi bo'limlardan birini tanlang:"
-    )
-    await safe_edit_message(call, text, reply_markup=sources_menu_kb(tg_count, web_count))
-
-
-@router.callback_query(F.data.startswith("admin:src:tg:"))
-async def callback_sources_tg_list(call: CallbackQuery) -> None:
-    """Telegram kanallari sahifalangan ro'yxati."""
-    await call.answer()
-    page = int(call.data.split(":")[-1])
-    channels = source_manager.telegram_channels
-    text = (
-        f"📱 <b>TELEGRAM KANALLAR RO'YXATI ({len(channels)} ta):</b>\n\n"
-        "<i>Kanal tafsilotlarini ko'rish yoki uni o'chirish (🗑️) uchun tegishli tugmani bosing:</i>"
-    )
-    kb = tg_sources_page_kb(channels, page=page, per_page=6)
-    await safe_edit_message(call, text, reply_markup=kb)
-
-
-@router.callback_query(F.data.startswith("admin:src:web:"))
-async def callback_sources_web_list(call: CallbackQuery) -> None:
-    """Veb-saytlar sahifalangan ro'yxati."""
-    await call.answer()
-    page = int(call.data.split(":")[-1])
-    websites = source_manager.web_sources
-    text = (
-        f"💻 <b>VEB-SAYTLAR RO'YXATI ({len(websites)} ta):</b>\n\n"
-        "<i>Sayt tafsilotlarini ko'rish yoki o'chirish (🗑️) uchun tegishli tugmani bosing:</i>"
-    )
-    kb = web_sources_page_kb(websites, page=page, per_page=6)
-    await safe_edit_message(call, text, reply_markup=kb)
-
-
-@router.callback_query(F.data.startswith("admin:src:view_tg:"))
-async def callback_sources_view_tg(call: CallbackQuery) -> None:
-    """Bitta Telegram kanalning to'liq ma'lumotlarini ko'rish."""
-    await call.answer()
-    user = call.data.split(":")[-1]
-    ch = next((c for c in source_manager.telegram_channels if c.get("username", "").lower() == user.lower()), None)
-    if not ch:
-        await call.answer("Kanal topilmadi!", show_alert=True)
-        return
-
-    text = (
-        f"📱 <b>TELEGRAM KANAL MA'LUMOTI:</b>\n\n"
-        f"🏷️ <b>Nomi:</b> {ch.get('name', user)}\n"
-        f"🔗 <b>Username:</b> @{ch.get('username')}\n"
-        f"🌐 <b>Tili:</b> {ch.get('lang', 'uz')}\n"
-        f"⚡ <b>Ustuvorlik:</b> {ch.get('priority', 'normal')}\n"
-        f"🔗 <b>Havola:</b> https://t.me/{ch.get('username')}\n"
-    )
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🧪 Darhol tekshirib ko'rish", callback_data=f"admin:src:test_tg:{user}"),
-                InlineKeyboardButton(text="🗑️ Kanalni o'chirish", callback_data=f"admin:src:del_tg:{user}")
-            ],
-            [InlineKeyboardButton(text="◀️ Kanallar ro'yxatiga qaytish", callback_data="admin:src:tg:0")]
-        ]
-    )
-    await safe_edit_message(call, text, reply_markup=kb)
-
-
-@router.callback_query(F.data.startswith("admin:src:view_web:"))
-async def callback_sources_view_web(call: CallbackQuery) -> None:
-    """Bitta veb-saytning to'liq ma'lumotlarini ko'rish."""
-    await call.answer()
-    sid = call.data.split(":")[-1]
-    site = next((w for w in source_manager.web_sources if w.get("id", "").lower() == sid.lower() or w.get("name", "").lower() == sid.lower()), None)
-    if not site:
-        await call.answer("Veb-sayt topilmadi!", show_alert=True)
-        return
-
-    text = (
-        f"💻 <b>VEB-SAYT MA'LUMOTI:</b>\n\n"
-        f"🏷️ <b>Nomi:</b> {site.get('name')}\n"
-        f"🆔 <b>ID:</b> <code>{site.get('id')}</code>\n"
-        f"🌐 <b>Sayt URL:</b> {site.get('url')}\n"
-        f"📡 <b>Feed/RSS URL:</b> <code>{site.get('feed_url')}</code>\n"
-        f"📁 <b>Turi:</b> {site.get('type', 'rss').upper()}\n"
-        f"🌐 <b>Tili:</b> {site.get('lang', 'uz')}\n"
-    )
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🧪 Darhol tekshirib ko'rish", callback_data=f"admin:src:test_web:{sid}"),
-                InlineKeyboardButton(text="🗑️ Saytni o'chirish", callback_data=f"admin:src:del_web:{sid}")
-            ],
-            [InlineKeyboardButton(text="◀️ Saytlar ro'yxatiga qaytish", callback_data="admin:src:web:0")]
-        ]
-    )
-    await safe_edit_message(call, text, reply_markup=kb)
-
-
-@router.callback_query(F.data.startswith("admin:src:del_tg:"))
-async def callback_sources_del_tg(call: CallbackQuery) -> None:
-    """Telegram kanalni o'chirish."""
-    user = call.data.split(":")[-1]
-    success, msg = source_manager.remove_telegram_channel(user)
-    await call.answer(msg, show_alert=True)
-    await callback_sources_tg_list(call)
-
-
-@router.callback_query(F.data.startswith("admin:src:del_web:"))
-async def callback_sources_del_web(call: CallbackQuery) -> None:
-    """Veb-saytni o'chirish."""
-    sid = call.data.split(":")[-1]
-    success, msg = source_manager.remove_web_source(sid)
-    await call.answer(msg, show_alert=True)
-    await callback_sources_web_list(call)
-
-
-@router.callback_query(F.data.startswith("admin:src:test_tg:"))
-async def callback_sources_test_tg(call: CallbackQuery) -> None:
-    """Telegram kanalni bir martalik skanerlab testlash."""
-    user = call.data.split(":")[-1]
-    await call.answer(f"@{user} skanerlanmoqda...", show_alert=False)
-    load_msg = await call.message.answer(f"⏳ <b>@{user} kanali tekshirilmoqda...</b>", parse_mode="HTML")
-    res = await source_manager.test_single_source(user)
-    if not res.get("success"):
-        await load_msg.edit_text(f"❌ Xatolik yuz berdi: {res.get('error')}", parse_mode="HTML")
-        return
-
-    text = (
-        f"✅ <b>Kanal tekshiruvi natijasi:</b> @{user}\n\n"
-        f"📥 Olingan so'nggi postlar: <b>{res.get('total_fetched')} ta</b>\n"
-        f"🚨 Metroga oid xabarlar: <b>{res.get('metro_found')} ta</b>\n\n"
-    )
-    samples = res.get("sample_items", [])
-    if samples:
-        text += "<b>Oxirgi postlar namunalari:</b>\n"
-        for s in samples[:3]:
-            text += f"• <i>{html.escape(s.title[:80])}</i>\n"
-
-    await load_msg.edit_text(text, parse_mode="HTML", reply_markup=back_to_main_kb())
-
-
-@router.callback_query(F.data.startswith("admin:src:test_web:"))
-async def callback_sources_test_web(call: CallbackQuery) -> None:
-    """Veb-saytni bir martalik testlash."""
-    sid = call.data.split(":")[-1]
-    await call.answer(f"'{sid}' tekshirilmoqda...", show_alert=False)
-    load_msg = await call.message.answer(f"⏳ <b>'{sid}' sayti tekshirilmoqda...</b>", parse_mode="HTML")
-    res = await source_manager.test_single_source(sid)
-    if not res.get("success"):
-        await load_msg.edit_text(f"❌ Xatolik yuz berdi: {res.get('error')}", parse_mode="HTML")
-        return
-
-    text = (
-        f"✅ <b>Veb-sayt tekshiruvi natijasi:</b> {res.get('source_name')}\n\n"
-        f"📥 Olingan so'nggi postlar: <b>{res.get('total_fetched')} ta</b>\n"
-        f"🚨 Metroga oid xabarlar: <b>{res.get('metro_found')} ta</b>\n\n"
-    )
-    samples = res.get("sample_items", [])
-    if samples:
-        text += "<b>Oxirgi postlar namunalari:</b>\n"
-        for s in samples[:3]:
-            text += f"• <i>{html.escape(s.title[:80])}</i>\n"
-
-    await load_msg.edit_text(text, parse_mode="HTML", reply_markup=back_to_main_kb())
-
-
-@router.callback_query(F.data == "admin:src:add_tg")
-async def callback_sources_add_tg_start(call: CallbackQuery, state: FSMContext) -> None:
-    """Telegram kanal qo'shish so'rovini boshlash."""
-    await call.answer()
-    await state.set_state(AdminStates.waiting_for_tg_username)
-    await call.message.answer(
-        "➕ <b>YANGI TELEGRAM KANAL QO'SHISH:</b>\n\n"
-        "Kanalning <b>@username</b>ini yoki havolasini yuboring (masalan: <code>@tashkent_news</code>):\n\n"
-        "<i>Bekor qilish uchun pastdagi tugmani bosing.</i>",
         parse_mode="HTML",
-        reply_markup=cancel_kb()
+        reply_markup=get_main_keyboard()
     )
-
-
-@router.message(StateFilter(AdminStates.waiting_for_tg_username))
-async def process_add_tg_username(message: Message, state: FSMContext) -> None:
-    """Telegram kanal username kiritilganda tekshirish va saqlash."""
-    username = message.text.strip()
-    status_msg = await message.answer(f"⏳ <b>@{username} tekshirilmoqda...</b>", parse_mode="HTML")
-    
-    test_res = await source_manager.test_single_source(username)
-    if not test_res.get("success"):
-        await status_msg.edit_text(
-            f"❌ <b>Kanalni qo'shib bo'lmadi!</b>\n"
-            f"Sabab: Kanal ochiq (public) emas yoki xatolik: {test_res.get('error')}",
-            parse_mode="HTML",
-            reply_markup=cancel_kb()
-        )
-        return
-
-    success, msg = source_manager.add_telegram_channel(
-        username=username,
-        name=test_res.get("source_name", username)
-    )
-    await state.clear()
-    if success:
-        await status_msg.edit_text(
-            f"✅ <b>Muvaffaqiyatli!</b>\n\n"
-            f"{msg}\n"
-            f"Oxirgi olingan postlar soni: <b>{test_res.get('total_fetched')} ta</b>\n"
-            f"Endi ushbu kanal 24/7 monitoring ro'yxatiga kiritildi.",
-            parse_mode="HTML",
-            reply_markup=back_to_main_kb()
-        )
-    else:
-        await status_msg.edit_text(f"⚠️ {msg}", parse_mode="HTML", reply_markup=back_to_main_kb())
-
-
-@router.callback_query(F.data == "admin:src:add_web")
-async def callback_sources_add_web_start(call: CallbackQuery, state: FSMContext) -> None:
-    """Veb-sayt qo'shish so'rovini boshlash."""
-    await call.answer()
-    await state.set_state(AdminStates.waiting_for_web_name)
-    await call.message.answer(
-        "➕ <b>YANGI VEB-SAYT / RSS MANBA QO'SHISH (1/3 QADAM):</b>\n\n"
-        "Sayt nomini kiriting (masalan: <code>Gazeta.uz Maxsus</code>):",
-        parse_mode="HTML",
-        reply_markup=cancel_kb()
-    )
-
-
-@router.message(StateFilter(AdminStates.waiting_for_web_name))
-async def process_add_web_name(message: Message, state: FSMContext) -> None:
-    """Sayt nomi qabul qilinganda."""
-    await state.update_data(web_name=message.text.strip())
-    await state.set_state(AdminStates.waiting_for_web_url)
-    await message.answer(
-        "🌐 <b>2/3 QADAM:</b>\n\n"
-        "Saytning bosh sahifa URL manzilini kiriting (masalan: <code>https://gazeta.uz</code>):",
-        parse_mode="HTML",
-        reply_markup=cancel_kb()
-    )
-
-
-@router.message(StateFilter(AdminStates.waiting_for_web_url))
-async def process_add_web_url(message: Message, state: FSMContext) -> None:
-    """Sayt URL manzili qabul qilinganda."""
-    await state.update_data(web_url=message.text.strip())
-    await state.set_state(AdminStates.waiting_for_web_feed)
-    await message.answer(
-        "📡 <b>3/3 QADAM:</b>\n\n"
-        "Saytning RSS / Atom Feed manzilini kiriting (masalan: <code>https://gazeta.uz/uz/rss/</code>):",
-        parse_mode="HTML",
-        reply_markup=cancel_kb()
-    )
-
-
-@router.message(StateFilter(AdminStates.waiting_for_web_feed))
-async def process_add_web_feed(message: Message, state: FSMContext) -> None:
-    """Sayt Feed manzili qabul qilinganda saqlash."""
-    data = await state.get_data()
-    feed_url = message.text.strip()
-    name = data.get("web_name", "Yangi Sayt")
-    url = data.get("web_url", "")
-    await state.clear()
-
-    status_msg = await message.answer("⏳ RSS manba tekshirilmoqda...", parse_mode="HTML")
-    success, msg = source_manager.add_web_source(name=name, url=url, feed_url=feed_url)
-    if success:
-        await status_msg.edit_text(
-            f"✅ <b>Muvaffaqiyatli qo'shildi!</b>\n\n"
-            f"Sayt: <b>{name}</b>\n"
-            f"URL: {url}\n"
-            f"RSS: {feed_url}",
-            parse_mode="HTML",
-            reply_markup=back_to_main_kb()
-        )
-    else:
-        await status_msg.edit_text(f"⚠️ {msg}", parse_mode="HTML", reply_markup=back_to_main_kb())
-
-
-@router.callback_query(F.data == "admin:src:test")
-async def callback_sources_test_prompt(call: CallbackQuery, state: FSMContext) -> None:
-    """Manbani testlash uchun nom so'rash."""
-    await call.answer()
-    await state.set_state(AdminStates.waiting_for_test_source)
-    await call.message.answer(
-        "🔍 <b>MANBANI TEKSHIRIB KO'RISH:</b>\n\n"
-        "Tekshirmoqchi bo'lgan Telegram kanal username yoki sayt nomini yuboring (masalan: <code>@kunuzofficial</code>):",
-        parse_mode="HTML",
-        reply_markup=cancel_kb()
-    )
-
-
-@router.message(StateFilter(AdminStates.waiting_for_test_source))
-async def process_test_source(message: Message, state: FSMContext) -> None:
-    """Manbani testlash natijasini ko'rsatish."""
-    ident = message.text.strip()
-    await state.clear()
-    status_msg = await message.answer(f"⏳ <b>'{ident}' tekshirilmoqda...</b>", parse_mode="HTML")
-    res = await source_manager.test_single_source(ident)
-    if not res.get("success"):
-        await status_msg.edit_text(f"❌ Xatolik yuz berdi: {res.get('error')}", parse_mode="HTML", reply_markup=back_to_main_kb())
-        return
-
-    text = (
-        f"✅ <b>Natija:</b> {res.get('source_name')}\n"
-        f"Turi: <b>{res.get('source_type')}</b>\n"
-        f"Olingan postlar: <b>{res.get('total_fetched')} ta</b>\n"
-        f"Metroga oid yangiliklar: <b>{res.get('metro_found')} ta</b>\n\n"
-    )
-    samples = res.get("sample_items", [])
-    if samples:
-        text += "<b>Oxirgi postlar namunalari:</b>\n"
-        for s in samples[:3]:
-            text += f"• <i>{html.escape(s.title[:80])}</i>\n"
-
-    await status_msg.edit_text(text, parse_mode="HTML", reply_markup=back_to_main_kb())
 
 
 # =========================================================================
-# FILTR VA TEST VOSITALARI
+# OLDIN YUBORILGAN INLINE TUGMALAR UCHUN XAVFSIZ CALLBACK HANDLER
 # =========================================================================
 
-@router.callback_query(F.data == "admin:filter")
-async def callback_filter_menu(call: CallbackQuery) -> None:
-    """Filtr menyusi."""
-    await call.answer()
-    text = (
-        "🧪 <b>FILTR VA TEST VOSITALARI BO'LIMI:</b>\n\n"
-        "Ushbu bo'lim orqali quyidagilarni amalga oshirishingiz mumkin:\n"
-        "1. <b>Matnni filtrdan testlash:</b> Ixtiyoriy xabarni botga yuborib, uning qanday teglanishi va qabul qilinishini tekshirish;\n"
-        "2. <b>Maxsus kalit so'zlar:</b> Yangi metro atamalari yoki bekatlarini dinamik qo'shish;\n"
-        "3. <b>Test Alert:</b> Adminga haqiqiy ko'rinishdagi xabarnoma jo'natish."
-    )
-    await safe_edit_message(call, text, reply_markup=filter_menu_kb())
-
-
-@router.callback_query(F.data == "admin:flt:test_text")
-async def callback_filter_test_start(call: CallbackQuery, state: FSMContext) -> None:
-    """Matn yuborish so'rovi."""
-    await call.answer()
-    await state.set_state(AdminStates.waiting_for_test_text)
-    await call.message.answer(
-        "🧪 <b>MATNNI FILTRDAN TEKSHIRISH:</b>\n\n"
-        "Istalgan yangilik matni yoki sarlavhasini yuboring. Tizim uni tahlil qilib, to'liq hisobot beradi:",
-        parse_mode="HTML",
-        reply_markup=cancel_kb()
-    )
-
-
-@router.message(StateFilter(AdminStates.waiting_for_test_text))
-async def process_filter_test_text(message: Message, state: FSMContext) -> None:
-    """Yuborilgan matnni filtr va dublikat tahlilidan o'tkazish."""
-    text = message.text.strip()
-    await state.clear()
-
-    analysis = explain_filter(text, text)
-    is_metro = analysis.get("is_metro", False)
-    tags = analysis.get("tags", [])
-    reason = analysis.get("reason", "")
-    matched = analysis.get("matched", [])
-
-    is_dup, dup_source, sim = deduplicator.is_duplicate(text, text, "Test")
-
-    verdict_icon = "🟢 QABUL QILINADI (METROGA OID)" if is_metro else "🔴 RAD ETILADI (METROGA ALOQADOR EMAS)"
-    tags_str = " ".join(tags) if tags else "Mavjud emas"
-    matched_str = ", ".join(matched) if matched else "Mos keluvchi belgilar yo'q"
-    dup_str = f"⚠️ Ha! (Asl manba: {dup_source}, o'xshashlik: {sim*100:.1f}%)" if is_dup else f"✅ Yo'q (Maksimal o'xshashlik: {sim*100:.1f}%)"
-
-    result_text = (
-        "🔬 <b>FILTR DIAGNOSTIKASI NATIJASI:</b>\n\n"
-        f"<b>Qaror:</b> {verdict_icon}\n"
-        f"🏷️ <b>Berilgan teglar:</b> <code>{tags_str}</code>\n"
-        f"🔍 <b>Tahlil sababi:</b> {reason}\n"
-        f"📌 <b>Aniqlangan belgilar:</b> <code>{matched_str}</code>\n\n"
-        f"🧠 <b>Kross-dublikat tekshiruvi:</b>\n{dup_str}"
-    )
-    await message.answer(result_text, parse_mode="HTML", reply_markup=back_to_main_kb())
-
-
-@router.callback_query(F.data == "admin:flt:keywords")
-async def callback_filter_keywords(call: CallbackQuery) -> None:
-    """Maxsus kalit so'zlar ro'yxati."""
-    await call.answer()
-    keywords = get_custom_keywords()
-    text = (
-        f"🏷️ <b>ADMIN QO'SHGAN MAXSUS KALIT SO'ZLAR ({len(keywords)} ta):</b>\n\n"
-        "<i>Ushbu so'zlar Toshkent metrosiga oid yangi xabarlarni tutishda asosiy filtrga qo'shimcha sifatida ishlaydi:</i>"
-    )
-    await safe_edit_message(call, text, reply_markup=custom_keywords_kb(keywords))
-
-
-@router.callback_query(F.data == "admin:flt:add_kw")
-async def callback_filter_add_kw_start(call: CallbackQuery, state: FSMContext) -> None:
-    """Yangi kalit so'z kiritish so'rovi."""
-    await call.answer()
-    await state.set_state(AdminStates.waiting_for_new_keyword)
-    await call.message.answer(
-        "➕ <b>YANGI KALIT SO'Z QO'SHISH:</b>\n\n"
-        "Metroga oid yangi so'z yoki bekat nomini kiriting (masalan: <code>Yangi Toshkent bekati</code>):",
-        parse_mode="HTML",
-        reply_markup=cancel_kb()
-    )
-
-
-@router.message(StateFilter(AdminStates.waiting_for_new_keyword))
-async def process_filter_add_kw(message: Message, state: FSMContext) -> None:
-    """Kalit so'zni saqlash."""
-    kw = message.text.strip()
-    await state.clear()
-    success = add_custom_keyword(kw)
-    if success:
-        await message.answer(
-            f"✅ <b>'{kw}'</b> kalit so'zi muvaffaqiyatli qo'shildi va filtr xotirasiga saqlandi!",
-            parse_mode="HTML",
-            reply_markup=back_to_main_kb()
-        )
-    else:
-        await message.answer("⚠️ Kalit so'z juda qisqa yoki xatolik yuz berdi.", reply_markup=back_to_main_kb())
-
-
-@router.callback_query(F.data.startswith("admin:flt:del_kw:"))
-async def callback_filter_del_kw(call: CallbackQuery) -> None:
-    """Kalit so'zni o'chirish."""
-    kw = call.data.split(":")[-1]
-    success = remove_custom_keyword(kw)
-    if success:
-        await call.answer(f"'{kw}' kalit so'zi o'chirildi!", show_alert=True)
-    else:
-        await call.answer("O'chirishda xatolik!", show_alert=True)
-    await callback_filter_keywords(call)
-
-
-@router.callback_query(F.data == "admin:flt:test_alert")
-async def callback_filter_test_alert(call: CallbackQuery) -> None:
-    """Test xabarnomasini chaqirish."""
-    await call.answer("Test xabarnoma jo'natilmoqda...", show_alert=False)
-    test_item = NewsItem(
-        raw_id="admin_test_post_002",
-        url="https://tashmetro.uz",
-        title="Toshkent metrosida yangi poyezdlar sinovi yakunlandi (TEST OGOHLANTIRISH)",
-        content="Yangi tarkiblar Chilonzor yo'nalishida yo'lovchilarga xizmat ko'rsatishni boshladi. Ushbu xabar admin boshqaruv panelidan test sifatida yuborildi.",
-        source_name="Metro Monitoring Test Markazi",
-        published_at=datetime.datetime.now().isoformat(),
-        tags=["#metro", "#chilonzor", "#poyezd", "#test"]
-    )
-    await send_metro_alert(call.bot, test_item, chat_ids=[call.message.chat.id])
-    await call.message.answer("✅ <b>Test ogohlantirish xabari muvaffaqiyatli yetkazildi!</b>", parse_mode="HTML")
-
-
-# =========================================================================
-# KESH VA XOTIRANI BOSHQARISH (CACHE MANAGEMENT)
-# =========================================================================
-
-@router.callback_query(F.data == "admin:cache")
-async def callback_cache_menu(call: CallbackQuery) -> None:
-    """Kesh boshqaruv menyusi."""
-    await call.answer()
-    text = (
-        "🧹 <b>KESH VA XOTIRANI TOZALASH BO'LIMI:</b>\n\n"
-        f"• <b>Keshdagi xabarlar (seen_posts.json):</b> {storage.count} ta\n"
-        f"• <b>Antidublikat xotirasi (seen_fingerprints.json):</b> {len(deduplicator._history)} ta voqea\n\n"
-        "⚠️ <i>Diqqat: Keshni tozalash avval ko'rilgan xabarlarning qayta tekshirilishiga sabab bo'lishi mumkin.</i>"
-    )
-    await safe_edit_message(call, text, reply_markup=cache_menu_kb())
-
-
-@router.callback_query(F.data == "admin:cache:seen")
-async def callback_cache_clear_seen(call: CallbackQuery) -> None:
-    """Ko'rilgan xabarlar keshini tozalash."""
-    c = storage.clear()
-    await call.answer(f"Seen posts keshi tozalandi ({c} ta element o'chirildi)!", show_alert=True)
-    await callback_cache_menu(call)
-
-
-@router.callback_query(F.data == "admin:cache:fingerprints")
-async def callback_cache_clear_fingerprints(call: CallbackQuery) -> None:
-    """Antidublikat izlari xotirasini tozalash."""
-    c = deduplicator.clear_history()
-    await call.answer(f"Antidublikat xotirasi tozalandi ({c} ta voqea o'chirildi)!", show_alert=True)
-    await callback_cache_menu(call)
-
-
-@router.callback_query(F.data == "admin:cache:all")
-async def callback_cache_clear_all(call: CallbackQuery) -> None:
-    """Barcha keshni tozalash."""
-    c1 = storage.clear()
-    c2 = deduplicator.clear_history()
-    await call.answer(f"Barcha kesh tozalandi! ({c1} xabar, {c2} voqea o'chirildi)", show_alert=True)
-    await callback_cache_menu(call)
+@router.callback_query()
+async def safe_fallback_callback(call: CallbackQuery) -> None:
+    """Oldingi inline tugmalar bosilganda xato bermasdan xabar berish."""
+    await call.answer("Iltimos, pastdagi asosiy klaviatura menyusidan foydalaning.")

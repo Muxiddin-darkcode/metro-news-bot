@@ -8,10 +8,11 @@ class NewsItem:
     content: str
     url: str
     source_name: str
-    source_type: str  # 'telegram' yoki 'web'
-    raw_id: str
+    source_type: str = "web"  # 'telegram' yoki 'web'
+    raw_id: str = ""
     published_at: Optional[str] = None
     tags: Optional[List[str]] = None
+    image_url: Optional[str] = None
 
     @property
     def full_text(self) -> str:

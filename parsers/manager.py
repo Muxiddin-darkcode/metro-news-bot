@@ -8,14 +8,14 @@ import httpx
 from config import settings, logger
 from parsers.base import NewsItem
 from parsers.telegram_channels import fetch_telegram_channel
-from parsers.web_scrapers import fetch_rss_source, fetch_html_source
+from parsers.web_scrapers import fetch_rss_source, fetch_html_source, extract_og_image
 from core.storage import storage
 from core.filter import is_metro_related
 from core.deduplicator import deduplicator
 
 class SourceManager:
     """
-    80 ta manbani (40 ta kanal va 40 ta sayt) parallel ravishda
+    120+ ta manbani (Telegram kanallar va veb-saytlar) parallel ravishda
     Semaphore oqimlari orqali boshqaruvchi markaziy menejer.
     """
     def __init__(self, sources_file=settings.SOURCES_FILE):
@@ -215,7 +215,7 @@ class SourceManager:
 
     async def scan_all_sources(self) -> Tuple[List[NewsItem], Dict]:
         """
-        Barcha 80 ta manbani asinxron parallel tekshirish va
+        Barcha manbalarni asinxron parallel tekshirish va
         faqat yangi, dublikatsiz metro xabarlarini ajratib olish.
         """
         start_time = time.time()
@@ -223,7 +223,7 @@ class SourceManager:
         
         all_collected_items: List[NewsItem] = []
 
-        limits = httpx.Limits(max_keepalive_connections=25, max_connections=50)
+        limits = httpx.Limits(max_keepalive_connections=35, max_connections=60)
         async with httpx.AsyncClient(limits=limits, timeout=12.0) as client:
             tasks = []
 
@@ -286,8 +286,22 @@ class SourceManager:
                 )
                 continue
 
+            # Veb-sayt maqolalaridan fotosuratni Open Graph (og:image) orqali yuklab olish
+            if not item.image_url and item.url and item.url.startswith("http"):
+                try:
+                    async with httpx.AsyncClient(timeout=8.0) as img_client:
+                        found_img = await extract_og_image(img_client, item.url)
+                        if found_img:
+                            item.image_url = found_img
+                            logger.info(f"Veb maqoladan fotosurat ajratib olindi: {item.source_name} -> {found_img}")
+                except Exception as ie:
+                    logger.debug(f"Web rasm olishda xatolik ({item.url}): {ie}")
+
             # Yangi noyob metro hodisasi deb ro'yxatga olamiz
-            deduplicator.register_event(item.title, item.content, item.source_name, item.url)
+            deduplicator.register_event(
+                item.title, item.content, item.source_name, item.url,
+                image_url=item.image_url or ""
+            )
             new_metro_alerts.append(item)
             logger.info(f"🚨 YANGI METRO XABARI TOPILDI: {item.source_name} -> {item.title[:70]}")
 

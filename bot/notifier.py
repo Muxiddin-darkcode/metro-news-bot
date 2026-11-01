@@ -1,16 +1,47 @@
 import html
 import datetime
 import logging
+import httpx
+from typing import Optional, List
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
+from aiogram.exceptions import TelegramBadRequest
 from config import settings, format_uz_time
 from parsers.base import NewsItem
-
+from core.ai_analyzer import ai_analyzer, AIAnalysisResult
 
 logger = logging.getLogger("MetroMonitor.Notifier")
 
+COMMON_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+}
+
+async def download_photo_file(image_url: str) -> Optional[BufferedInputFile]:
+    """
+    Rasm URL manzilidan baytlarni asinxron yuklab olib, BufferedInputFile yaratadi.
+    Bu Telegram serverlarining 'failed to get HTTP URL content' xatosini 100% oldini oladi.
+    """
+    if not image_url or not image_url.startswith("http"):
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=8.0, headers=COMMON_HEADERS, follow_redirects=True) as client:
+            resp = await client.get(image_url)
+            if resp.status_code == 200 and len(resp.content) > 500:
+                ext = "jpg"
+                ct = resp.headers.get("content-type", "").lower()
+                if "png" in ct or ".png" in image_url.lower():
+                    ext = "png"
+                elif "webp" in ct or ".webp" in image_url.lower():
+                    ext = "webp"
+                return BufferedInputFile(resp.content, filename=f"metro_image.{ext}")
+    except Exception as exc:
+        logger.debug(f"Rasmni yuklab olishda xatolik ({image_url[:60]}): {exc}")
+    return None
+
+
 def format_alert_message(item: NewsItem) -> str:
-    """Xabarni chiroyli va qulay HTML ko'rinishida formatlash (O'zbekiston vaqti bilan)."""
+    """Xabarni standart HTML ko'rinishida formatlash (AI o'chirilgandagi fallback, chiziqsiz)."""
     now_str = format_uz_time(fmt="%H:%M | %d.%m.%Y")
     if item.published_at:
         try:
@@ -19,61 +50,87 @@ def format_alert_message(item: NewsItem) -> str:
             now_str = format_uz_time(pub_dt, fmt="%H:%M | %d.%m.%Y")
         except Exception:
             pass
-    
-    # HTML maxsus belgilarini tozalash
-    title_safe = html.escape(item.title.strip())
-    content_safe = html.escape(item.content.strip())
-    source_safe = html.escape(item.source_name)
-    
-    # Qisqacha matn uzunligini nazorat qilish
+
+    title_safe = html.escape(item.title.strip(), quote=False)
+    content_safe = html.escape(item.content.strip(), quote=False)
+    source_safe = html.escape(item.source_name, quote=False)
+
     if len(content_safe) > 700:
         content_safe = content_safe[:700] + "..."
 
-    # Teglar
-    tags_str = " ".join(item.tags) if item.tags else "#metro"
+    tags_str = " ".join(item.tags) if item.tags else "#metro #toshkent"
 
     msg = (
-        "🚇 <b>METRO YANGILIK / MONITORING XABARI</b>\n\n"
+        "🚇 <b>METRO MONITORING XABARI</b>\n\n"
         f"📌 <b>Manba:</b> {source_safe}\n"
         f"🕒 <b>Vaqt:</b> {now_str}\n"
-        f"🔍 <b>Belgilar:</b> <code>{tags_str}</code>\n\n"
+        f"🔍 <b>Belgilar:</b> <code>{html.escape(tags_str)}</code>\n\n"
         f"📰 <b>Sarlavha:</b>\n<b>{title_safe}</b>\n\n"
     )
 
     if content_safe and content_safe != title_safe:
         msg += f"📝 <b>Tafsilot:</b>\n{content_safe}\n\n"
 
-    msg += "────────────────────────\n<i>⚡ Xabar avtomatik ravishda aniqlanib, kross-dublikat tekshiruvidan o'tkazildi.</i>"
-
+    msg += "<i>⚡ Xabar avtomatik aniqlanib, kross-dublikat tekshiruvidan o'tkazildi.</i>"
     return msg
 
-async def send_metro_alert(bot: Bot, item: NewsItem, chat_ids: list = None) -> int:
+
+async def send_metro_alert(
+    bot: Bot,
+    item: NewsItem,
+    chat_ids: Optional[List[int]] = None,
+    pre_analyzed_result: Optional[AIAnalysisResult] = None
+) -> int:
     """
-    Aniqlangan metro xabarini belgilangan chat(lar)ga jo'natadi.
-    Muvaffaqiyatli yetkazilgan xabarlar sonini qaytaradi.
+    Aniqlangan metro xabarini AI orqali tahlil qilib,
+    fotosurat bilan birga faqat bitta '🔗 Asl manbani ochish' inline tugmasi bilan jo'natadi.
     """
-    text = format_alert_message(item)
-    
-    # Asl manbaga o'tish va tezkor inline tugmalar (orqa foni rangli)
+    # 1. AI tahlilini amalga oshirish
+    ai_result = pre_analyzed_result
+    if ai_result is None:
+        try:
+            ai_result = await ai_analyzer.analyze_news(item)
+        except Exception as exc:
+            logger.error(f"AI tahlil jarayonida kutilmagan xatolik: {exc}")
+            ai_result = ai_analyzer._build_fallback_result(item, reason="Tahlil jarayonidagi xatolik")
+
+    # 2. Xabar matnini tayyorlash
+    try:
+        text = ai_result.to_telegram_html(item)
+    except Exception as exc:
+        logger.warning(f"AI xabarini HTML formatlashda xato: {exc}, standart formatga o'tilmoqda.")
+        text = format_alert_message(item)
+
+    # Antidublikat xotirasida saqlash
+    try:
+        from core.deduplicator import deduplicator
+        caption_html = ai_result.to_telegram_caption_html(item) if hasattr(ai_result, "to_telegram_caption_html") else ""
+        deduplicator.update_event_ai(
+            url=item.url,
+            ai_title=ai_result.title,
+            ai_summary=ai_result.summary,
+            ai_badge=ai_result.badge,
+            image_url=item.image_url or "",
+            station=ai_result.station_and_line,
+            status=ai_result.incident_status,
+            advice=ai_result.advice,
+            full_html=text,
+            caption_html=caption_html
+        )
+    except Exception as exc:
+        logger.debug(f"Antidublikat xotirasini yangilashda xatolik: {exc}")
+
+    # 3. Yagona inline tugma (Asl manba)
+    item_url = item.url.strip() if item.url else "https://tashmetro.uz"
+    if not item_url.startswith("http"):
+        item_url = f"https://{item_url}"
+
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="🔗 Asl manbani ochish",
-                    url=item.url if item.url.startswith("http") else f"https://{item.url}",
-                    style="primary"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔄 Qayta tekshirish",
-                    callback_data="btn_check_now",
-                    style="success"
-                ),
-                InlineKeyboardButton(
-                    text="📊 Tizim holati",
-                    callback_data="btn_status",
-                    style="primary"
+                    url=item_url
                 )
             ]
         ]
@@ -82,8 +139,30 @@ async def send_metro_alert(bot: Bot, item: NewsItem, chat_ids: list = None) -> i
     targets = chat_ids if chat_ids is not None else settings.target_chat_ids
     successful_deliveries = 0
 
+    # 4. Fotosurat faylini oldindan yuklab olish (xatolik bo'lmasligi uchun)
+    photo_file = None
+    if item.image_url:
+        photo_file = await download_photo_file(item.image_url)
 
     for chat_id in targets:
+        # Fotosurat bilan yuborish (Photo Card)
+        if photo_file:
+            try:
+                caption_text = ai_result.to_telegram_caption_html(item) if hasattr(ai_result, "to_telegram_caption_html") else text
+                await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo_file,
+                    caption=caption_text,
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+                successful_deliveries += 1
+                logger.info(f"Metro xabarnomasi (RASM BILAN) muvaffaqiyatli yetkazildi: Chat ID {chat_id}")
+                continue
+            except Exception as pe:
+                logger.warning(f"Rasm bilan jo'natishda xatolik ({pe}), matn sifatida qayta jo'natilmoqda...")
+
+        # Rasm bo'lmaganda matn ko'rinishida yuborish
         try:
             await bot.send_message(
                 chat_id=chat_id,
@@ -93,7 +172,21 @@ async def send_metro_alert(bot: Bot, item: NewsItem, chat_ids: list = None) -> i
                 disable_web_page_preview=False
             )
             successful_deliveries += 1
-            logger.info(f"Xabar muvaffaqiyatli yetkazildi: Chat ID {chat_id}")
+            logger.info(f"Metro xabarnomasi muvaffaqiyatli yetkazildi: Chat ID {chat_id}")
+        except TelegramBadRequest as exc:
+            logger.warning(f"HTML formatlash xatosi (Chat ID {chat_id}): {exc}. Standart formatda qayta urinilmoqda...")
+            try:
+                fallback_text = format_alert_message(item)
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=fallback_text,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                    disable_web_page_preview=False
+                )
+                successful_deliveries += 1
+            except Exception as e2:
+                logger.error(f"Xabarni qayta jo'natishda ham xatolik: {e2}")
         except Exception as e:
             logger.error(f"Chatga ({chat_id}) xabar yetkazishda xatolik: {e}")
 

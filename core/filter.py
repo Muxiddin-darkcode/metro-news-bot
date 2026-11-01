@@ -124,18 +124,20 @@ SPECIFIC_STATIONS = [
 METRO_LINES = [
     "chilonzor yo'li", "чилонзор йўли", "chilonzor yo'nalishi", "чилонзор йўналиши", "chilonzor liniyasi", "чилонзор линияси",
     "yunusobod yo'li", "юнусобод йўли", "yunusobod yo'nalishi", "юнусобод йўналиши", "yunusobod liniyasi", "юнусобод линияси",
-    "o'zbekiston metro", "ўзбекистон метро", "o'zbekiston yo'nalishi metro", "ўзбекистон йўналиши метро", "o'zbekiston liniyasi",
-    "sergeli metro", "сергели метро", "sergeli yo'nalishi", "сергели йўналиши", "sergeli liniyasi",
-    "yerusti metro", "ерусти метро", "yer osti metro", "ер ости метро",
-    "halqa metro", "ҳалқа метро", "yerusti halqa yo'li", "ерусти ҳалқа йўли", "halqa liniyasi", "ҳалқа линияси"
+    "o'zbekiston yo'li", "o'zbekiston metro", "ўзбекистон метро", "o'zbekiston yo'nalishi", "ўзбекистон йўналиши метро", "o'zbekiston liniyasi",
+    "sergeli yo'li", "sergeli metro", "сергели метро", "sergeli yo'nalishi", "сергели йўналиши", "sergeli liniyasi",
+    "halqa yo'li", "halqa metro", "ҳалқа метро", "yerusti halqa yo'li", "ерусти ҳалқа йўли", "halqa liniyasi", "ҳалқа линияси",
+    "yerusti metro", "yerusti metrosi", "ерусти метро", "yer osti metro", "yerosti transporti", "ер ости метро"
 ]
 
 # Uy-joy va ko'chmas mulk reklamalari (filtrlash shart)
 REAL_ESTATE_PATTERNS = [
-    r"metro(?:ga)?\s+(?:yaqin|5\s*daqiqa|10\s*daqiqa|qadam).*?(?:uy|kvartira|xonadon|hovli|joy|kafe|restoran|do'kon|sotiladi|ijara|narxi|arenda|\$)",
-    r"(?:kvartira|uy|xonadon|kottedj|dom|ofis|noturar|bino)\s+(?:sotiladi|ijaraga|arenda|narxi|olaman).*?metro",
+    r"metro(?:si|ga|siga)?\s+(?:yaqin|\d+\s*daqiqa|\d+\s*minut|qadam|joylashgan|yonida|atrofida).*?(?:uy|kvartira|xonadon|hovli|joy|kafe|restoran|do'kon|sotiladi|ijara|narxi|arenda|\$)",
+    r"(?:kvartira|uy|xonadon|kottedj|dom|ofis|noturar|bino|yer|uchastka)\s+(?:sotiladi|ijaraga|arenda|narxi|olaman).*?metro",
+    r"metro(?:si|ga|siga)?\s+yaqinida",
     r"рядом\s+с\s+метро.*?(?:квартира|дом|офис|аренда|продается|цена|новостройка|\$)",
     r"(?:квартира|дом|аренда|новостройка|продается|сдается|недвижимость).*?метро",
+    r"метро(?:дан|га)?\s+(?:яқин|\d+\s*дақиқа|қадам).*?(?:уй|квартира|хонадон|сотилади|ижара|нархи|\$)",
 ]
 
 # Sport va yengil atletika masofalari (metr, 200 metr yugurish, estafeta)
@@ -150,6 +152,7 @@ STRONG_METRO_SIGNALS = [
     "metro bekati", "metro bekatlari", "станция метро", "станции метро",
     "metro poyezdi", "вагон метро", "поезд метро", "chilonzor yo'li",
     "chilonzor yo'nalishi", "yunusobod yo'nalishi", "o'zbekiston yo'nalishi",
+    "sergeli yo'li", "halqa yo'li", "yerusti metrosi", "yerosti transporti",
     "toshmetro", "тошметро"
 ]
 
@@ -173,6 +176,7 @@ DETAIL_TAGS = [
     ("тўхтаб қолди", "#toxtab_qoldi"),
     ("kechikish", "#kechikish"),
     ("кечикиш", "#kechikish"),
+    ("kechikyapti", "#kechikish"),
     ("nosozlik", "#nosozlik"),
     ("носозлик", "#nosozlik"),
     ("vagon", "#vagon"),
@@ -181,6 +185,7 @@ DETAIL_TAGS = [
     ("поезд", "#poyezd"),
     ("eskalator", "#eskalator"),
     ("эскалатор", "#eskalator"),
+    ("lift", "#lift"),
     ("turniket", "#turniket"),
     ("турникет", "#turniket"),
     ("chipta", "#chipta"),
@@ -191,6 +196,36 @@ DETAIL_TAGS = [
     ("юнусобод", "#yunusobod"),
     ("sergeli", "#sergeli"),
     ("сергели", "#sergeli"),
+    ("tirbandlik", "#tirbandlik"),
+    ("gavjumlik", "#gavjumlik"),
+    ("navbat", "#navbat"),
+    ("yong'in", "#yongin"),
+    ("ёнғин", "#yongin"),
+    ("tutun", "#tutun"),
+    ("тутун", "#tutun"),
+    ("evakuatsiya", "#evakuatsiya"),
+    ("эвакуация", "#evakuatsiya"),
+    ("suv toshishi", "#suv_toshishi"),
+    ("suv sizishi", "#suv_sizishi"),
+    ("o'g'irlik", "#ogirlik"),
+    ("mushtlashuv", "#mushtlashuv"),
+    ("муштлашув", "#mushtlashuv"),
+    ("janjal", "#janjal"),
+    ("shikoyat", "#shikoyat"),
+    ("шикоят", "#shikoyat"),
+    ("xavfsizlik", "#xavfsizlik"),
+    ("хавфсизлик", "#xavfsizlik"),
+    ("5 vagonli", "#vagon"),
+    ("yangi vagon", "#yangi_vagon"),
+    ("harakat jadvali", "#jadval"),
+    ("jadvali", "#jadval"),
+    ("ish vaqti", "#ish_vaqti"),
+    ("rasmiy munosabat", "#rasmiy_munosabat"),
+    ("rasmiy bayonot", "#rasmiy_bayonot"),
+    ("raddiya", "#raddiya"),
+    ("matbuot xizmati", "#matbuot_xizmati"),
+    ("tender", "#tender"),
+    ("modernizatsiya", "#modernizatsiya"),
     ("tarif", "#tarif"),
     ("тариф", "#tarif"),
     ("narx", "#narx"),
@@ -198,11 +233,35 @@ DETAIL_TAGS = [
 ]
 
 def clean_text(text: str) -> str:
-    """Matnni tozalash va kichik harfga o'tkazish."""
+    """
+    Matnni tozalash, kichik harfga o'tkazish hamda yangi va eski o'zbek
+    alifbosidagi belgilar (ş, ç, ó, ǵ) va apostroflarni standartlashtirish.
+    """
     if not text:
         return ""
     text = text.lower()
-    text = text.replace("ʻ", "'").replace("ʼ", "'").replace("`", "'")
+
+    # Yangi alifbo loyihasi (ş -> sh, ç -> ch, ó -> o', ǵ -> g') va turli klaviatura variantlari
+    replacements = {
+        'ş': 'sh',
+        'ç': 'ch',
+        'ó': "o'",
+        'õ': "o'",
+        'ö': "o'",
+        'ǵ': "g'",
+        'ğ': "g'",
+        'ı': 'i',
+        'ʻ': "'",
+        'ʼ': "'",
+        '`': "'",
+        '‘': "'",
+        '’': "'",
+        '“': '"',
+        '”': '"',
+    }
+    for orig, rep in replacements.items():
+        text = text.replace(orig, rep)
+
     return text
 
 def is_metro_related(title: str, content: str) -> Tuple[bool, List[str]]:

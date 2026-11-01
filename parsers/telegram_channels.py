@@ -1,3 +1,4 @@
+import re
 import logging
 import httpx
 from bs4 import BeautifulSoup
@@ -64,6 +65,23 @@ async def fetch_telegram_channel(
             else:
                 display_name = f"Telegram / {channel_name} (@{clean_username})"
 
+            # Xabardagi rasmni (foto yoki video thumbnail) ajratib olish
+            image_url = None
+            photo_wrap = post.find("a", class_="tgme_widget_message_photo_wrap")
+            if photo_wrap:
+                style_attr = photo_wrap.get("style", "")
+                m = re.search(r"background-image:url\(['\"]?(https?://[^'\"]+)['\"]?\)", style_attr)
+                if m:
+                    image_url = m.group(1)
+
+            if not image_url:
+                video_thumb = post.find("i", class_="tgme_widget_message_video_thumb")
+                if video_thumb:
+                    style_attr = video_thumb.get("style", "")
+                    m = re.search(r"background-image:url\(['\"]?(https?://[^'\"]+)['\"]?\)", style_attr)
+                    if m:
+                        image_url = m.group(1)
+
             item = NewsItem(
                 title=title,
                 content=content,
@@ -71,7 +89,8 @@ async def fetch_telegram_channel(
                 source_name=display_name,
                 source_type="telegram",
                 raw_id=post_id or post_url,
-                published_at=published_at
+                published_at=published_at,
+                image_url=image_url
             )
             items.append(item)
 

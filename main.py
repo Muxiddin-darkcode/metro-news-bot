@@ -39,9 +39,13 @@ async def monitor_background_loop(bot: Bot):
             new_alerts, stats = await source_manager.scan_all_sources()
 
             if new_alerts:
-                logger.info(f"🚨 {len(new_alerts)} ta yangi metro xabari topildi! Yuborilmoqda...")
-                for item in new_alerts:
+                logger.info(f"🚨 {len(new_alerts)} ta yangi metro xabari topildi! AI tomonidan birin-ketin tahlil qilinib, bitta-bitta jo'natilmoqda...")
+                for idx, item in enumerate(new_alerts, 1):
+                    logger.info(f"[{idx}/{len(new_alerts)}] AI tahlil va jo'natish: {item.title[:60]}...")
                     await send_metro_alert(bot, item)
+                    # Bir nechta yangilik kelganda AI tahlili navbati va Telegram xabarlari ketma-ketligi buzilmasligi uchun kechikish
+                    if idx < len(new_alerts):
+                        await asyncio.sleep(2.5)
             else:
                 logger.info("Yangi metro xabarlari aniqlanmadi.")
 

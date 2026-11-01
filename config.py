@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     ADMIN_IDS: str = "123456789,987654321"
     GROUP_ID: str = ""
     CHECK_INTERVAL_SECONDS: int = 60
-    MAX_CONCURRENT_REQUESTS: int = 15
+    MAX_CONCURRENT_REQUESTS: int = 20
     SIMILARITY_THRESHOLD: float = 0.65
     
     # Path settings
@@ -23,8 +23,16 @@ class Settings(BaseSettings):
     SEEN_FINGERPRINTS_FILE: Path = DATA_DIR / "seen_fingerprints.json"
     
     # Parsing limits
-    MAX_SEEN_CACHE_SIZE: int = 2500
+    MAX_SEEN_CACHE_SIZE: int = 5000
     REQUEST_TIMEOUT: float = 10.0
+
+    # AI Analyzer settings (Gemini + OpenRouter Fallback)
+    AI_ENABLED: bool = True
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_MODEL: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+    AI_TIMEOUT: float = 25.0
 
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),

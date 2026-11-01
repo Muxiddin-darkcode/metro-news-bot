@@ -165,17 +165,32 @@ class CrossSourceDeduplicator:
 
         return False, None, max_score
 
-    def register_event(self, title: str, content: str, source_name: str, url: str) -> None:
+    def register_event(
+        self,
+        title: str,
+        content: str,
+        source_name: str,
+        url: str,
+        ai_title: str = "",
+        ai_summary: str = "",
+        ai_badge: str = "",
+        image_url: str = ""
+    ) -> Dict:
         """Yangi noyob metro voqeasini xotiraga qayd qilish."""
         full_text = f"{title} {content}"
         tokens = list(self.tokenize(full_text))
 
         event_data = {
             "title": title[:140],
+            "content": content[:400],
             "source": source_name,
             "url": url,
             "tokens": tokens,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "ai_title": ai_title,
+            "ai_summary": ai_summary,
+            "ai_badge": ai_badge,
+            "image_url": image_url
         }
         self._history.append(event_data)
 
@@ -186,10 +201,57 @@ class CrossSourceDeduplicator:
             if now - item.get("timestamp", 0) < self.ttl_seconds
         ]
         self._save()
+        return event_data
+
+    def update_event_ai(
+        self,
+        url: str,
+        ai_title: str,
+        ai_summary: str,
+        ai_badge: str,
+        image_url: str = "",
+        station: str = "",
+        status: str = "",
+        advice: str = "",
+        full_html: str = "",
+        caption_html: str = ""
+    ) -> None:
+        """Voqea uchun AI tahlil natijasini yangilash."""
+        for item in reversed(self._history):
+            if item.get("url") == url or item.get("title") in ai_title or ai_title in item.get("title", ""):
+                item["ai_title"] = ai_title
+                item["ai_summary"] = ai_summary
+                item["ai_badge"] = ai_badge
+                if image_url:
+                    item["image_url"] = image_url
+                if station:
+                    item["ai_station"] = station
+                if status:
+                    item["ai_status"] = status
+                if advice:
+                    item["ai_advice"] = advice
+                if full_html:
+                    item["ai_full_html"] = full_html
+                if caption_html:
+                    item["ai_caption_html"] = caption_html
+                self._save()
+                break
 
     def get_recent_events(self, limit: int = 10) -> List[Dict]:
         """Oxirgi qayd etilgan metro hodisalari ro'yxatini qaytaradi."""
         return list(reversed(self._history))[:limit]
+
+    def get_today_events(self) -> List[Dict]:
+        """O'zbekiston vaqti bo'yicha bugungi kun (00:00 dan boshlab) topilgan xabarlar."""
+        from config import uz_now, UZ_TZ
+        from datetime import datetime
+        now = uz_now()
+        today_midnight = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=UZ_TZ).timestamp()
+        today_items = [
+            item for item in self._history
+            if item.get("timestamp", 0) >= today_midnight
+        ]
+        return list(reversed(today_items))
 
     def clear_history(self) -> int:
         """Antidublikat xotirasini tozalash."""

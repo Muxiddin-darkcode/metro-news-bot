@@ -52,10 +52,16 @@ class Settings(BaseSettings):
         import re
         ids: List[int] = []
         raw_list = [
-            self.ADMIN_ID_1 or os.environ.get("ADMIN_1", ""),
-            self.ADMIN_ID_2 or os.environ.get("ADMIN_2", ""),
-            self.ADMIN_ID_3 or os.environ.get("ADMIN_3", ""),
-            self.ADMIN_IDS or os.environ.get("ADMIN_IDS", "")
+            self.ADMIN_ID_1,
+            self.ADMIN_ID_2,
+            self.ADMIN_ID_3,
+            self.ADMIN_IDS,
+            os.environ.get("ADMIN_1", ""),
+            os.environ.get("ADMIN_2", ""),
+            os.environ.get("ADMIN_3", ""),
+            os.environ.get("ADMIN_IDS", ""),
+            os.environ.get("ADMINS", ""),
+            os.environ.get("ADMIN", "")
         ]
         for val in raw_list:
             if val:

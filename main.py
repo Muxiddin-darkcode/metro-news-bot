@@ -182,9 +182,11 @@ async def keep_alive_loop():
 
 async def run_bot():
     """Asosiy bot va monitoringni ishga tushirish funksiyasi."""
-    # Render yoki bulutli serverlarda HTTP port ochish
-    if "PORT" in os.environ:
+    # Render yoki bulutli serverlarda (Docker, Railway, VPS) HTTP health server ochish
+    try:
         await start_health_server()
+    except Exception as he:
+        logger.warning(f"Health-check serverni ochishda ogohlantirish: {he}")
     token = settings.BOT_TOKEN
     
     if not token or token == "YOUR_TELEGRAM_BOT_TOKEN_HERE":

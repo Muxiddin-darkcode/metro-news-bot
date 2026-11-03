@@ -129,13 +129,18 @@ class CrossSourceDeduplicator:
     def calculate_metrics(self, tokens_a: Set[str], tokens_b: Set[str]) -> Tuple[float, float, int]:
         """
         Jaccard va Overlap (Containment) koeffitsientlari.
+        Xotirani ortiqcha band qilmaslik uchun union to'plam yaratmasdan (|A| + |B| - |A ∩ B|) hisoblanadi.
         Natija: (jaccard_score, overlap_score, intersection_count)
         """
         if not tokens_a or not tokens_b:
             return 0.0, 0.0, 0
 
+        # Agar umumiy so'z umuman bo'lmasa, darhol 0 qaytariladi
+        if tokens_a.isdisjoint(tokens_b):
+            return 0.0, 0.0, 0
+
         intersection = len(tokens_a.intersection(tokens_b))
-        union = len(tokens_a.union(tokens_b))
+        union = len(tokens_a) + len(tokens_b) - intersection
         min_len = min(len(tokens_a), len(tokens_b))
 
         jaccard = intersection / union if union > 0 else 0.0

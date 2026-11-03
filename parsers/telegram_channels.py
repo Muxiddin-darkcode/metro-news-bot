@@ -25,6 +25,10 @@ def _parse_telegram_html(
     Worker threadda bajariladi, asosiy asyncio event loopni zarracha bloklamaydi.
     """
     items: List[NewsItem] = []
+    # Agar sahifada xabarlar umuman bo'lmasa, og'ir DOM daraxti tuzilmaydi
+    if not html_text or "tgme_widget_message" not in html_text:
+        return items
+
     soup = BeautifulSoup(html_text, "lxml")
     posts = soup.find_all("div", class_="tgme_widget_message")
     
@@ -102,7 +106,8 @@ async def fetch_telegram_channel(
     url = f"https://t.me/s/{clean_username}"
 
     try:
-        response = await client.get(url, headers=HEADERS, timeout=8.0, follow_redirects=True)
+        req_timeout = httpx.Timeout(8.0, connect=4.0)
+        response = await client.get(url, headers=HEADERS, timeout=req_timeout, follow_redirects=True)
         if response.status_code != 200:
             logger.warning(f"Telegram kanal ochilmadi: @{clean_username} (status: {response.status_code})")
             return []

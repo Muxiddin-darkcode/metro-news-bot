@@ -93,7 +93,8 @@ async def fetch_rss_source(
     name = source_info.get("name", "Veb-sayt")
 
     try:
-        response = await client.get(feed_url, headers=HEADERS, timeout=8.0, follow_redirects=True)
+        req_timeout = httpx.Timeout(8.0, connect=4.0)
+        response = await client.get(feed_url, headers=HEADERS, timeout=req_timeout, follow_redirects=True)
         if response.status_code != 200:
             logger.debug(f"RSS manba ochilmadi: {name} (status {response.status_code})")
             return []
@@ -159,7 +160,8 @@ async def fetch_html_source(
     name = source_info.get("name", "Veb-sayt")
 
     try:
-        response = await client.get(url, headers=HEADERS, timeout=8.0, follow_redirects=True)
+        req_timeout = httpx.Timeout(8.0, connect=4.0)
+        response = await client.get(url, headers=HEADERS, timeout=req_timeout, follow_redirects=True)
         if response.status_code != 200:
             return []
 
@@ -173,6 +175,8 @@ async def fetch_html_source(
 
 def _extract_og_image_from_html(html_text: str, base_url: str) -> Optional[str]:
     """HTML dan og:image ni worker threadda xavfsiz ajratib olish."""
+    if not html_text or ("image" not in html_text and "img" not in html_text):
+        return None
     try:
         soup = BeautifulSoup(html_text, "lxml")
         og_img = (

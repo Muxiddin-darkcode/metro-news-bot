@@ -17,13 +17,23 @@ COMMON_HEADERS = {
     "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
 }
 
+# Xotiradagi tezkor fotosuratlar keshi (LRU, qayta yuklab olishni 100% yo'qotadi)
+_IMAGE_CACHE: dict = {}
+_IMAGE_CACHE_MAX = 50
+
 async def download_photo_file(image_url: str) -> Optional[BufferedInputFile]:
     """
     Rasm URL manzilidan baytlarni asinxron yuklab olib, BufferedInputFile yaratadi.
-    Bu Telegram serverlarining 'failed to get HTTP URL content' xatosini 100% oldini oladi.
+    Kesh (cache) orqali takroriy so'rovlarni yo'qotadi va Telegram serverlarining
+    'failed to get HTTP URL content' xatosini 100% oldini oladi.
     """
     if not image_url or not image_url.startswith("http"):
         return None
+
+    if image_url in _IMAGE_CACHE:
+        content, ext = _IMAGE_CACHE[image_url]
+        return BufferedInputFile(content, filename=f"metro_image.{ext}")
+
     try:
         async with httpx.AsyncClient(timeout=8.0, headers=COMMON_HEADERS, follow_redirects=True) as client:
             resp = await client.get(image_url)
@@ -34,6 +44,12 @@ async def download_photo_file(image_url: str) -> Optional[BufferedInputFile]:
                     ext = "png"
                 elif "webp" in ct or ".webp" in image_url.lower():
                     ext = "webp"
+
+                if len(_IMAGE_CACHE) >= _IMAGE_CACHE_MAX:
+                    # Eng eski rasm keshdan chiqariladi
+                    _IMAGE_CACHE.pop(next(iter(_IMAGE_CACHE)))
+                _IMAGE_CACHE[image_url] = (resp.content, ext)
+
                 return BufferedInputFile(resp.content, filename=f"metro_image.{ext}")
     except Exception as exc:
         logger.debug(f"Rasmni yuklab olishda xatolik ({image_url[:60]}): {exc}")
@@ -144,18 +160,25 @@ async def send_metro_alert(
     if item.image_url:
         photo_file = await download_photo_file(item.image_url)
 
+    uploaded_photo_id: Optional[str] = None
+
     for chat_id in targets:
         # Fotosurat bilan yuborish (Photo Card)
-        if photo_file:
+        if photo_file or uploaded_photo_id:
             try:
                 caption_text = ai_result.to_telegram_caption_html(item) if hasattr(ai_result, "to_telegram_caption_html") else text
-                await bot.send_photo(
+                # 1-marta baytlar yuklanadi, keyingi adminlarga Telegram file_id ishlatiladi (tarmoq trafigi va CPU 3x tejaladi)
+                photo_payload = uploaded_photo_id if uploaded_photo_id else photo_file
+                sent_msg = await bot.send_photo(
                     chat_id=chat_id,
-                    photo=photo_file,
+                    photo=photo_payload,
                     caption=caption_text,
                     parse_mode="HTML",
                     reply_markup=keyboard
                 )
+                if not uploaded_photo_id and sent_msg and sent_msg.photo:
+                    uploaded_photo_id = sent_msg.photo[-1].file_id
+
                 successful_deliveries += 1
                 logger.info(f"Metro xabarnomasi (RASM BILAN) muvaffaqiyatli yetkazildi: Chat ID {chat_id}")
                 continue

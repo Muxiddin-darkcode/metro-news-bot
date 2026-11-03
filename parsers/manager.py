@@ -39,8 +39,9 @@ class SourceManager:
     async def get_http_client(self) -> httpx.AsyncClient:
         """Keep-Alive ulanishlarini qayta ishlatuvchi umumiy HTTP sessiya."""
         if self._shared_client is None or self._shared_client.is_closed:
-            limits = httpx.Limits(max_keepalive_connections=40, max_connections=65)
-            self._shared_client = httpx.AsyncClient(limits=limits, timeout=8.0)
+            limits = httpx.Limits(max_keepalive_connections=50, max_connections=80)
+            timeout = httpx.Timeout(8.0, connect=4.0)
+            self._shared_client = httpx.AsyncClient(limits=limits, timeout=timeout)
         return self._shared_client
 
     async def close_http_client(self) -> None:

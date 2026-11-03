@@ -354,7 +354,7 @@ async def cmd_today_news(message: Message, state: FSMContext) -> None:
             )
 
         if idx < len(events):
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(0.3)
 
 
 @router.message(StateFilter("*"), Command("ai"))

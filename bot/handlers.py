@@ -221,14 +221,22 @@ async def cmd_main_menu(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(Command("check"))
-@router.message(F.text.in_(["🔍 Tekshirish", "🔍 Hozir tekshirish"]))
+@router.message(StateFilter("*"), Command("check"))
+@router.message(StateFilter("*"), F.text.in_(["🔍 Tekshirish", "🔍 Hozir tekshirish"]))
 async def cmd_check_now(message: Message, state: FSMContext) -> None:
     """Barcha kuzatilayotgan manbalarni parallel tekshirish va yangi xabarlarni jo'natish."""
     await state.clear()
+    if getattr(source_manager, "is_scanning", False):
+        await message.answer(
+            "⏳ <b>Hozirda manbalar tekshirilmoqda...</b>\n"
+            "Monitoring jarayoni orqa fonda ketmoqda, iltimos natija tayyor bo'lishini kuting.",
+            parse_mode="HTML"
+        )
+        return
+
     status_msg = await message.answer(
         "⏳ <b>Barcha manbalar parallel tekshirilmoqda...</b>\n"
-        "Iltimos, kuting (bu 4–8 soniya vaqt oladi)...",
+        "Iltimos, kuting (bu bir necha soniya vaqt oladi)...",
         parse_mode="HTML"
     )
     try:
@@ -236,7 +244,7 @@ async def cmd_check_now(message: Message, state: FSMContext) -> None:
         for idx, item in enumerate(new_alerts, 1):
             await send_metro_alert(message.bot, item)
             if idx < len(new_alerts):
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(0.5)
 
         result_text = (
             "✅ <b>Tekshiruv muvaffaqiyatli yakunlandi!</b>\n\n"
@@ -251,8 +259,8 @@ async def cmd_check_now(message: Message, state: FSMContext) -> None:
         await status_msg.edit_text(f"❌ Tekshirishda xatolik yuz berdi: {e}", parse_mode="HTML")
 
 
-@router.message(Command("today"))
-@router.message(F.text.in_(["📅 Bugungi xabarlar", "📅 Bugungi yangiliklar"]))
+@router.message(StateFilter("*"), Command("today"))
+@router.message(StateFilter("*"), F.text.in_(["📅 Bugungi xabarlar", "📅 Bugungi yangiliklar"]))
 async def cmd_today_news(message: Message, state: FSMContext) -> None:
     """Bugungi kun bo'yicha metro yangiliklarini AI tahlillari va rasmlari bilan ketma-ket chiqarish."""
     await state.clear()
@@ -343,8 +351,8 @@ async def cmd_today_news(message: Message, state: FSMContext) -> None:
             await asyncio.sleep(1.2)
 
 
-@router.message(Command("ai"))
-@router.message(F.text == "🤖 AI Tahlilchi")
+@router.message(StateFilter("*"), Command("ai"))
+@router.message(StateFilter("*"), F.text == "🤖 AI Tahlilchi")
 async def cmd_ai_menu(message: Message, state: FSMContext) -> None:
     """AI Tahlilchi bo'limini ochish va Reply klaviaturani ko'rsatish."""
     await state.clear()
@@ -355,7 +363,7 @@ async def cmd_ai_menu(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(F.text.in_(["🔄 Aloqani tekshirish", "🔄 Tekshirish", "🔄 Provayderlarni tekshirish"]))
+@router.message(StateFilter("*"), F.text.in_(["🔄 Aloqani tekshirish", "🔄 Tekshirish", "🔄 Provayderlarni tekshirish"]))
 async def cmd_ai_check_providers(message: Message) -> None:
     """AI provayderlarining aloqasini real tekshirish."""
     status_msg = await message.answer(
@@ -395,7 +403,7 @@ async def cmd_ai_check_providers(message: Message) -> None:
     await status_msg.edit_text(msg, parse_mode="HTML")
 
 
-@router.message(F.text.in_(["▶️ AI ni yoqish", "⏸️ AI ni o'chirish", "▶️ Yoqish", "⏸️ O'chirish"]))
+@router.message(StateFilter("*"), F.text.in_(["▶️ AI ni yoqish", "⏸️ AI ni o'chirish", "▶️ Yoqish", "⏸️ O'chirish"]))
 async def cmd_ai_toggle(message: Message) -> None:
     """AI tahlilchini yoqish / o'chirish."""
     settings.AI_ENABLED = not settings.AI_ENABLED
@@ -407,8 +415,8 @@ async def cmd_ai_toggle(message: Message) -> None:
     )
 
 
-@router.message(Command("history", "news"))
-@router.message(F.text == "📰 So'nggi xabarlar")
+@router.message(StateFilter("*"), Command("history", "news"))
+@router.message(StateFilter("*"), F.text == "📰 So'nggi xabarlar")
 async def cmd_recent_news(message: Message, state: FSMContext) -> None:
     """Oxirgi aniqlangan metro xabarlarini ko'rsatish."""
     await state.clear()
@@ -420,8 +428,8 @@ async def cmd_recent_news(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(Command("status"))
-@router.message(F.text == "📊 Tizim holati")
+@router.message(StateFilter("*"), Command("status"))
+@router.message(StateFilter("*"), F.text == "📊 Tizim holati")
 async def cmd_status(message: Message, state: FSMContext) -> None:
     """Tizim holatini ko'rsatish."""
     await state.clear()
@@ -432,8 +440,8 @@ async def cmd_status(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(Command("sources"))
-@router.message(F.text == "🌐 Manbalar")
+@router.message(StateFilter("*"), Command("sources"))
+@router.message(StateFilter("*"), F.text == "🌐 Manbalar")
 async def cmd_sources_menu(message: Message, state: FSMContext) -> None:
     """Manbalar bo'limi Reply klaviaturasini ochish."""
     await state.clear()
@@ -451,9 +459,10 @@ async def cmd_sources_menu(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(F.text.startswith("📱 Telegram"))
-async def cmd_list_tg_channels(message: Message) -> None:
+@router.message(StateFilter("*"), F.text.startswith("📱 Telegram"))
+async def cmd_list_tg_channels(message: Message, state: FSMContext) -> None:
     """Barcha kuzatilayotgan Telegram kanallari ro'yxatini matn ko'rinishida chiqarish."""
+    await state.clear()
     channels = source_manager.telegram_channels
     tg_count = len(channels)
     web_count = len(source_manager.web_sources)
@@ -475,9 +484,10 @@ async def cmd_list_tg_channels(message: Message) -> None:
         )
 
 
-@router.message(F.text.startswith("💻 Saytlar") | F.text.startswith("💻 Veb-saytlar"))
-async def cmd_list_web_sources(message: Message) -> None:
+@router.message(StateFilter("*"), F.text.startswith("💻 Saytlar") | F.text.startswith("💻 Veb-saytlar"))
+async def cmd_list_web_sources(message: Message, state: FSMContext) -> None:
     """Barcha kuzatilayotgan Veb-saytlar ro'yxatini matn ko'rinishida chiqarish."""
+    await state.clear()
     websites = source_manager.web_sources
     tg_count = len(source_manager.telegram_channels)
     web_count = len(websites)
@@ -501,7 +511,7 @@ async def cmd_list_web_sources(message: Message) -> None:
     )
 
 
-@router.message(F.text.in_(["➕ Kanal", "➕ Kanal qo'shish"]))
+@router.message(StateFilter("*"), F.text.in_(["➕ Kanal", "➕ Kanal qo'shish"]))
 async def cmd_add_tg_start(message: Message, state: FSMContext) -> None:
     """Telegram kanal qo'shish so'rovini boshlash."""
     await state.set_state(AdminStates.waiting_for_tg_username)
@@ -550,7 +560,7 @@ async def process_add_tg_username(message: Message, state: FSMContext) -> None:
     await message.answer("Boshqaruv menyusi:", reply_markup=get_sources_reply_keyboard(tg_count, web_count))
 
 
-@router.message(F.text.in_(["➕ Sayt", "➕ Sayt qo'shish"]))
+@router.message(StateFilter("*"), F.text.in_(["➕ Sayt", "➕ Sayt qo'shish"]))
 async def cmd_add_web_start(message: Message, state: FSMContext) -> None:
     """Veb-sayt qo'shish so'rovini boshlash."""
     await state.set_state(AdminStates.waiting_for_web_name)
@@ -615,7 +625,7 @@ async def process_add_web_feed(message: Message, state: FSMContext) -> None:
     await message.answer("Boshqaruv menyusi:", reply_markup=get_sources_reply_keyboard(tg_count, web_count))
 
 
-@router.message(F.text.in_(["🔍 Manbani tekshirish", "🔍 Manba tekshirish"]))
+@router.message(StateFilter("*"), F.text.in_(["🔍 Manbani tekshirish", "🔍 Manba tekshirish"]))
 async def cmd_test_source_prompt(message: Message, state: FSMContext) -> None:
     """Manbani testlash uchun nom so'rash."""
     await state.set_state(AdminStates.waiting_for_test_source)
@@ -661,8 +671,8 @@ async def process_test_source(message: Message, state: FSMContext) -> None:
     await message.answer("Boshqaruv menyusi:", reply_markup=get_sources_reply_keyboard(tg_count, web_count))
 
 
-@router.message(Command("settings"))
-@router.message(F.text == "⚙️ Sozlamalar")
+@router.message(StateFilter("*"), Command("settings"))
+@router.message(StateFilter("*"), F.text == "⚙️ Sozlamalar")
 async def cmd_settings_menu(message: Message, state: FSMContext) -> None:
     """Sozlamalar bo'limi Reply klaviaturasini ochish."""
     await state.clear()
@@ -673,9 +683,10 @@ async def cmd_settings_menu(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(F.text.in_(["▶️ Kuzatuvni yoqish", "⏸️ Kuzatuvni to'xtatish", "▶️ Monitoringni yoqish", "⏸️ Monitoringni to'xtatish"]))
-async def cmd_toggle_monitoring(message: Message) -> None:
+@router.message(StateFilter("*"), F.text.in_(["▶️ Kuzatuvni yoqish", "⏸️ Kuzatuvni to'xtatish", "▶️ Monitoringni yoqish", "⏸️ Monitoringni to'xtatish"]))
+async def cmd_toggle_monitoring(message: Message, state: FSMContext) -> None:
     """Monitoringni to'xtatish yoki qayta yoqish."""
+    await state.clear()
     is_paused = source_manager.toggle_pause()
     state_word = "vaqtincha to'xtatildi (Pause)" if is_paused else "qayta ishga tushirildi (24/7 Faol)"
     await message.answer(
@@ -685,10 +696,11 @@ async def cmd_toggle_monitoring(message: Message) -> None:
     )
 
 
-@router.message(Command("ping", "diag"))
-@router.message(F.text == "🩺 Diagnostika")
-async def cmd_diagnostics(message: Message) -> None:
+@router.message(StateFilter("*"), Command("ping", "diag"))
+@router.message(StateFilter("*"), F.text == "🩺 Diagnostika")
+async def cmd_diagnostics(message: Message, state: FSMContext) -> None:
     """Tizim diagnostikasi va Telegram API ping kechikishini o'lchash."""
+    await state.clear()
     t_start = time.time()
     ping_msg = await message.answer("📡 Server va Telegram API bilan aloqa tekshirilmoqda...")
     latency_ms = (time.time() - t_start) * 1000
@@ -713,9 +725,10 @@ async def cmd_diagnostics(message: Message) -> None:
     await ping_msg.edit_text(text, parse_mode="HTML")
 
 
-@router.message(F.text.startswith("⏱️ Interval:") | F.text.in_(["⏱️ 30s", "⏱️ 60s", "⏱️ 120s"]))
-async def cmd_set_interval(message: Message) -> None:
+@router.message(StateFilter("*"), F.text.startswith("⏱️ Interval:") | F.text.in_(["⏱️ 30s", "⏱️ 60s", "⏱️ 120s"]))
+async def cmd_set_interval(message: Message, state: FSMContext) -> None:
     """Tekshirish intervalini o'zgartirish."""
+    await state.clear()
     raw = message.text.replace("⏱️ Interval:", "").replace("⏱️", "").replace("s", "").strip()
     try:
         new_int = int(raw)
@@ -729,8 +742,8 @@ async def cmd_set_interval(message: Message) -> None:
         await message.answer("⚠️ Noto'g'ri interval qiymati.", reply_markup=get_settings_reply_keyboard(source_manager.is_paused))
 
 
-@router.message(Command("keywords"))
-@router.message(F.text == "🏷️ Kalit so'zlar")
+@router.message(StateFilter("*"), Command("keywords"))
+@router.message(StateFilter("*"), F.text == "🏷️ Kalit so'zlar")
 async def cmd_keywords_menu(message: Message, state: FSMContext) -> None:
     """Kalit so'zlar menyusi."""
     await state.clear()
@@ -741,7 +754,7 @@ async def cmd_keywords_menu(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(F.text.in_(["➕ So'z qo'shish", "➕ Yangi kalit so'z qo'shish"]))
+@router.message(StateFilter("*"), F.text.in_(["➕ So'z qo'shish", "➕ Yangi kalit so'z qo'shish"]))
 async def cmd_add_keyword_start(message: Message, state: FSMContext) -> None:
     """Yangi kalit so'z kiritish so'rovi."""
     await state.set_state(AdminStates.waiting_for_new_keyword)
@@ -772,7 +785,7 @@ async def process_add_keyword(message: Message, state: FSMContext) -> None:
         )
 
 
-@router.message(F.text.in_(["🔍 Matnni tekshirish", "🔍 Matn tekshirish"]))
+@router.message(StateFilter("*"), F.text.in_(["🔍 Matnni tekshirish", "🔍 Matn tekshirish"]))
 async def cmd_test_text_start(message: Message, state: FSMContext) -> None:
     """Matnni filtrdan tekshirish so'rovi."""
     await state.set_state(AdminStates.waiting_for_test_text)
@@ -814,8 +827,8 @@ async def process_test_text(message: Message, state: FSMContext) -> None:
     await message.answer(result_text, parse_mode="HTML", reply_markup=get_keywords_reply_keyboard())
 
 
-@router.message(Command("cache"))
-@router.message(F.text.in_(["🧹 Kesh", "🧹 Keshni tozalash"]))
+@router.message(StateFilter("*"), Command("cache"))
+@router.message(StateFilter("*"), F.text.in_(["🧹 Kesh", "🧹 Keshni tozalash"]))
 async def cmd_cache_menu(message: Message, state: FSMContext) -> None:
     """Kesh bo'limi Reply klaviaturasini ochish."""
     await state.clear()
@@ -826,9 +839,10 @@ async def cmd_cache_menu(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(F.text.in_(["🗑️ Postlar keshi", "🗑️ Ko'rilgan postlar keshini tozalash"]))
-async def cmd_clear_seen_cache(message: Message) -> None:
+@router.message(StateFilter("*"), F.text.in_(["🗑️ Postlar keshi", "🗑️ Ko'rilgan postlar keshini tozalash"]))
+async def cmd_clear_seen_cache(message: Message, state: FSMContext) -> None:
     """Seen posts keshini tozalash."""
+    await state.clear()
     c = storage.clear()
     await message.answer(
         f"✅ <b>Ko'rilgan xabarlar keshi tozalandi ({c} ta element o'chirildi)!</b>",
@@ -837,9 +851,10 @@ async def cmd_clear_seen_cache(message: Message) -> None:
     )
 
 
-@router.message(F.text.in_(["🧠 Dublikat izlari", "🧠 Antidublikat xotirasini tozalash"]))
-async def cmd_clear_dedup_cache(message: Message) -> None:
+@router.message(StateFilter("*"), F.text.in_(["🧠 Dublikat izlari", "🧠 Antidublikat xotirasini tozalash"]))
+async def cmd_clear_dedup_cache(message: Message, state: FSMContext) -> None:
     """Antidublikat izlarini tozalash."""
+    await state.clear()
     c = deduplicator.clear_history()
     await message.answer(
         f"✅ <b>Antidublikat xotirasi tozalandi ({c} ta voqea o'chirildi)!</b>",
@@ -848,9 +863,10 @@ async def cmd_clear_dedup_cache(message: Message) -> None:
     )
 
 
-@router.message(F.text.in_(["🧹 Barcha kesh", "🧹 BARCHA keshni tozalash"]))
-async def cmd_clear_all_cache(message: Message) -> None:
+@router.message(StateFilter("*"), F.text.in_(["🧹 Barcha kesh", "🧹 BARCHA keshni tozalash"]))
+async def cmd_clear_all_cache(message: Message, state: FSMContext) -> None:
     """Barcha keshni tozalash."""
+    await state.clear()
     c1 = storage.clear()
     c2 = deduplicator.clear_history()
     await message.answer(
@@ -860,9 +876,9 @@ async def cmd_clear_all_cache(message: Message) -> None:
     )
 
 
-@router.message(Command("logs"))
-@router.message(F.text.in_(["📋 Loglar", "📋 Tizim loglari"]))
-@router.message(F.text.in_(["🔄 Yangilash", "🔄 Loglarni yangilash"]))
+@router.message(StateFilter("*"), Command("logs"))
+@router.message(StateFilter("*"), F.text.in_(["📋 Loglar", "📋 Tizim loglari"]))
+@router.message(StateFilter("*"), F.text.in_(["🔄 Yangilash", "🔄 Loglarni yangilash"]))
 async def cmd_system_logs(message: Message, state: FSMContext) -> None:
     """Tizim loglarini ko'rsatish va yangilash."""
     await state.clear()

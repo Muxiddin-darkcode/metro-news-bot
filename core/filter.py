@@ -146,6 +146,11 @@ SPORTS_DISTANCE_PATTERNS = [
     r"\b(?:дистанци[ия]\s+\d+\s*м|\bзабег\b|\bэстафет\w*|\bгребл\w*|\bплавани\w*|\bмедал[ьяеи]\w*|\bазиатск\w+\s+игр\w*|\bчемпионат\w*)",
 ]
 
+# Unumdorlikni oshirish uchun regex qoliplarini bir marta oldindan kompilyatsiya qilish
+COMPILED_METRO_EXPLICIT = [re.compile(p, re.IGNORECASE) for p in METRO_EXPLICIT_PATTERNS]
+COMPILED_REAL_ESTATE = [re.compile(p, re.IGNORECASE) for p in REAL_ESTATE_PATTERNS]
+COMPILED_SPORTS_DISTANCE = [re.compile(p, re.IGNORECASE) for p in SPORTS_DISTANCE_PATTERNS]
+
 # Toshkent metrosiga oid kuchli, shubhasiz belgilar
 STRONG_METRO_SIGNALS = [
     "toshkent metropoliteni", "тошкент метрополитен", "tashkent metro",
@@ -276,16 +281,16 @@ def is_metro_related(title: str, content: str) -> Tuple[bool, List[str]]:
     # 1. Soxta so'zlar tekshiruvi (metrologiya, santimetr va h.k.)
     for excl in EXCLUSION_WORDS:
         if excl in cleaned:
-            has_real_metro = any(re.search(pat, cleaned) for pat in METRO_EXPLICIT_PATTERNS)
+            has_real_metro = any(pat.search(cleaned) for pat in COMPILED_METRO_EXPLICIT)
             if not has_real_metro:
                 return False, []
 
     # 2. Uy-joy yoki ko'chmas mulk reklamalari
-    if any(re.search(pat, cleaned) for pat in REAL_ESTATE_PATTERNS):
+    if any(pat.search(cleaned) for pat in COMPILED_REAL_ESTATE):
         return False, []
 
     # 3. Sport va yengil atletika masofalari (200 metr, suzish, medallar)
-    has_sports_distance = any(re.search(pat, cleaned) for pat in SPORTS_DISTANCE_PATTERNS)
+    has_sports_distance = any(pat.search(cleaned) for pat in COMPILED_SPORTS_DISTANCE)
     if has_sports_distance:
         # Faqat Toshkent metrosi aniq va kuchli tilga olingan bo'lsa ruxsat beriladi
         has_strong_metro = any(sig in cleaned for sig in STRONG_METRO_SIGNALS)
@@ -302,8 +307,8 @@ def is_metro_related(title: str, content: str) -> Tuple[bool, List[str]]:
     is_metro = False
 
     # 5. Qat'iy Metro so'zi tekshiruvi (metro, metrosi, metropoliten...)
-    for pat in METRO_EXPLICIT_PATTERNS:
-        if re.search(pat, cleaned):
+    for pat in COMPILED_METRO_EXPLICIT:
+        if pat.search(cleaned):
             is_metro = True
             if "#metro" not in matched_tags:
                 matched_tags.append("#metro")

@@ -1,5 +1,6 @@
 import re
 import logging
+import asyncio
 import httpx
 from bs4 import BeautifulSoup
 from typing import List, Optional
@@ -13,6 +14,80 @@ HEADERS = {
     "Accept-Language": "uz,ru,en;q=0.9",
 }
 
+def _parse_telegram_html(
+    html_text: str,
+    clean_username: str,
+    channel_name: str,
+    limit: int
+) -> List[NewsItem]:
+    """
+    Sinxron CPU-bound HTML parse jarayoni.
+    Worker threadda bajariladi, asosiy asyncio event loopni zarracha bloklamaydi.
+    """
+    items: List[NewsItem] = []
+    soup = BeautifulSoup(html_text, "lxml")
+    posts = soup.find_all("div", class_="tgme_widget_message")
+    
+    # Eng so'nggi postlardan limit miqdorda olish
+    for post in posts[-limit:]:
+        post_id = post.get("data-post", "")
+        
+        # Matnni qidirish
+        text_el = post.find("div", class_="tgme_widget_message_text")
+        text = text_el.get_text(separator="\n", strip=True) if text_el else ""
+        
+        # Agar matn bo'lmasa (faqat rasm/stiker), davom etish
+        if not text:
+            continue
+
+        # Havola va vaqt
+        date_el = post.find("a", class_="tgme_widget_message_date")
+        post_url = date_el.get("href", f"https://t.me/{post_id}") if date_el else f"https://t.me/{post_id}"
+        time_el = post.find("time")
+        published_at = time_el.get("datetime") if time_el else None
+
+        # Sarlavha uchun matnning birinchi qatorini olamiz
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        title = lines[0][:150] if lines else f"Telegram xabari (@{clean_username})"
+        content = "\n".join(lines[1:]) if len(lines) > 1 else text
+
+        # Manba nomini chiroyli formatlash
+        if not channel_name or channel_name.strip().lstrip("@").lower() == clean_username.lower():
+            display_name = f"Telegram / @{clean_username}"
+        else:
+            display_name = f"Telegram / {channel_name} (@{clean_username})"
+
+        # Xabardagi rasmni (foto yoki video thumbnail) ajratib olish
+        image_url = None
+        photo_wrap = post.find("a", class_="tgme_widget_message_photo_wrap")
+        if photo_wrap:
+            style_attr = photo_wrap.get("style", "")
+            m = re.search(r"background-image:url\(['\"]?(https?://[^'\"]+)['\"]?\)", style_attr)
+            if m:
+                image_url = m.group(1)
+
+        if not image_url:
+            video_thumb = post.find("i", class_="tgme_widget_message_video_thumb")
+            if video_thumb:
+                style_attr = video_thumb.get("style", "")
+                m = re.search(r"background-image:url\(['\"]?(https?://[^'\"]+)['\"]?\)", style_attr)
+                if m:
+                    image_url = m.group(1)
+
+        item = NewsItem(
+            title=title,
+            content=content,
+            url=post_url,
+            source_name=display_name,
+            source_type="telegram",
+            raw_id=post_id or post_url,
+            published_at=published_at,
+            image_url=image_url
+        )
+        items.append(item)
+
+    return items
+
 async def fetch_telegram_channel(
     client: httpx.AsyncClient,
     username: str,
@@ -25,78 +100,19 @@ async def fetch_telegram_channel(
     """
     clean_username = username.strip().lstrip("@")
     url = f"https://t.me/s/{clean_username}"
-    items: List[NewsItem] = []
 
     try:
-        response = await client.get(url, headers=HEADERS, timeout=10.0, follow_redirects=True)
+        response = await client.get(url, headers=HEADERS, timeout=8.0, follow_redirects=True)
         if response.status_code != 200:
             logger.warning(f"Telegram kanal ochilmadi: @{clean_username} (status: {response.status_code})")
-            return items
+            return []
 
-        soup = BeautifulSoup(response.text, "lxml")
-        posts = soup.find_all("div", class_="tgme_widget_message")
-        
-        # Eng so'nggi postlardan limit miqdorda olish
-        for post in posts[-limit:]:
-            post_id = post.get("data-post", "")
-            
-            # Matnni qidirish
-            text_el = post.find("div", class_="tgme_widget_message_text")
-            text = text_el.get_text(separator="\n", strip=True) if text_el else ""
-            
-            # Agar matn bo'lmasa (faqat rasm/stiker), davom etish
-            if not text:
-                continue
-
-            # Havola va vaqt
-            date_el = post.find("a", class_="tgme_widget_message_date")
-            post_url = date_el.get("href", f"https://t.me/{post_id}") if date_el else f"https://t.me/{post_id}"
-            time_el = post.find("time")
-            published_at = time_el.get("datetime") if time_el else None
-
-            # Sarlavha uchun matnning birinchi qatorini olamiz
-            lines = [l.strip() for l in text.split("\n") if l.strip()]
-            title = lines[0][:150] if lines else f"Telegram xabari (@{clean_username})"
-            content = "\n".join(lines[1:]) if len(lines) > 1 else text
-
-            # Manba nomini chiroyli formatlash
-            if not channel_name or channel_name.strip().lstrip("@").lower() == clean_username.lower():
-                display_name = f"Telegram / @{clean_username}"
-            else:
-                display_name = f"Telegram / {channel_name} (@{clean_username})"
-
-            # Xabardagi rasmni (foto yoki video thumbnail) ajratib olish
-            image_url = None
-            photo_wrap = post.find("a", class_="tgme_widget_message_photo_wrap")
-            if photo_wrap:
-                style_attr = photo_wrap.get("style", "")
-                m = re.search(r"background-image:url\(['\"]?(https?://[^'\"]+)['\"]?\)", style_attr)
-                if m:
-                    image_url = m.group(1)
-
-            if not image_url:
-                video_thumb = post.find("i", class_="tgme_widget_message_video_thumb")
-                if video_thumb:
-                    style_attr = video_thumb.get("style", "")
-                    m = re.search(r"background-image:url\(['\"]?(https?://[^'\"]+)['\"]?\)", style_attr)
-                    if m:
-                        image_url = m.group(1)
-
-            item = NewsItem(
-                title=title,
-                content=content,
-                url=post_url,
-                source_name=display_name,
-                source_type="telegram",
-                raw_id=post_id or post_url,
-                published_at=published_at,
-                image_url=image_url
-            )
-            items.append(item)
+        # CPU-talab parsingni alohida worker threadda bajaramiz
+        return await asyncio.to_thread(_parse_telegram_html, response.text, clean_username, channel_name, limit)
 
     except httpx.TimeoutException:
         logger.debug(f"Telegram kanal so'rov vaqti tugadi (timeout): @{clean_username}")
     except Exception as e:
         logger.warning(f"Telegram kanalni o'qishda xatolik (@{clean_username}): {e}")
 
-    return items
+    return []

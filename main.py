@@ -243,7 +243,7 @@ async def run_bot():
         # Bot pollingni uzluksiz, avtomatik qayta tiklanuvchi rejimda boshlash
         while True:
             try:
-                await dp.start_polling(bot, handle_signals=False)
+                await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types(), handle_signals=False)
             except asyncio.CancelledError:
                 break
             except Exception as exc:
@@ -253,6 +253,7 @@ async def run_bot():
         monitor_task.cancel()
         keep_alive_task.cancel()
         cleaner_task.cancel()
+        await source_manager.close_http_client()
         if health_runner:
             await health_runner.cleanup()
         await bot.session.close()

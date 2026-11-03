@@ -2,6 +2,7 @@ import re
 import json
 import time
 import logging
+import asyncio
 from typing import Set, List, Dict, Tuple, Optional
 from pathlib import Path
 from config import settings
@@ -66,6 +67,7 @@ class CrossSourceDeduplicator:
         self.threshold = threshold
         self.ttl_seconds = ttl_seconds
         self._history: List[Dict] = []
+        self._dirty: bool = False
         self._load()
 
     def _load(self) -> None:
@@ -74,10 +76,12 @@ class CrossSourceDeduplicator:
                 with open(self.filepath, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     now = time.time()
-                    self._history = [
-                        item for item in data 
-                        if now - item.get("timestamp", 0) < self.ttl_seconds
-                    ]
+                    self._history = []
+                    for item in data:
+                        if now - item.get("timestamp", 0) < self.ttl_seconds:
+                            # Token setni xotirada O(1) tezlik uchun keshlaymiz
+                            item["_token_set"] = set(item.get("tokens", []))
+                            self._history.append(item)
                     logger.info(f"Antidublikat xotirasiga {len(self._history)} ta so'nggi voqea yuklandi.")
             except Exception as e:
                 logger.error(f"seen_fingerprints.json faylini o'qishda xatolik: {e}")
@@ -88,10 +92,23 @@ class CrossSourceDeduplicator:
     def _save(self) -> None:
         try:
             self.filepath.parent.mkdir(parents=True, exist_ok=True)
+            to_dump = []
+            for item in self._history:
+                d = {k: v for k, v in item.items() if not k.startswith("_")}
+                to_dump.append(d)
             with open(self.filepath, "w", encoding="utf-8") as f:
-                json.dump(self._history, f, ensure_ascii=False, indent=2)
+                json.dump(to_dump, f, ensure_ascii=False)
+            self._dirty = False
         except Exception as e:
             logger.error(f"seen_fingerprints.json fayliga yozishda xatolik: {e}")
+
+    def save(self) -> None:
+        if self._dirty:
+            self._save()
+
+    async def save_async(self) -> None:
+        if self._dirty:
+            await asyncio.to_thread(self._save)
 
     def tokenize(self, text: str) -> Set[str]:
         """Matndan kalit so'zlar o'zaklarini (stemmed tokens) ajratib olish."""
@@ -144,7 +161,11 @@ class CrossSourceDeduplicator:
             if now - item.get("timestamp", 0) > self.ttl_seconds:
                 continue
 
-            stored_tokens = set(item.get("tokens", []))
+            stored_tokens = item.get("_token_set")
+            if stored_tokens is None:
+                stored_tokens = set(item.get("tokens", []))
+                item["_token_set"] = stored_tokens
+
             jaccard, overlap, inter_count = self.calculate_metrics(new_tokens, stored_tokens)
 
             # Birlashtirilgan o'xshashlik bahosi
@@ -186,6 +207,7 @@ class CrossSourceDeduplicator:
             "source": source_name,
             "url": url,
             "tokens": tokens,
+            "_token_set": set(tokens),
             "timestamp": time.time(),
             "ai_title": ai_title,
             "ai_summary": ai_summary,
@@ -200,6 +222,7 @@ class CrossSourceDeduplicator:
             item for item in self._history 
             if now - item.get("timestamp", 0) < self.ttl_seconds
         ]
+        self._dirty = True
         self._save()
         return event_data
 
@@ -234,6 +257,7 @@ class CrossSourceDeduplicator:
                     item["ai_full_html"] = full_html
                 if caption_html:
                     item["ai_caption_html"] = caption_html
+                self._dirty = True
                 self._save()
                 break
 
@@ -257,6 +281,7 @@ class CrossSourceDeduplicator:
         """Antidublikat xotirasini tozalash."""
         count = len(self._history)
         self._history.clear()
+        self._dirty = True
         self._save()
         logger.info(f"Antidublikat xotirasi tozalandi ({count} ta voqea o'chirildi).")
         return count

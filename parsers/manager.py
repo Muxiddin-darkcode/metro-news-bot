@@ -25,7 +25,29 @@ class SourceManager:
         self.last_check_time: float = 0
         self.last_check_duration: float = 0
         self.is_paused: bool = False
+        self.is_scanning: bool = False
+        self._scan_lock: Optional[asyncio.Lock] = None
+        self._shared_client: Optional[httpx.AsyncClient] = None
         self.load_sources()
+
+    @property
+    def scan_lock(self) -> asyncio.Lock:
+        if self._scan_lock is None:
+            self._scan_lock = asyncio.Lock()
+        return self._scan_lock
+
+    async def get_http_client(self) -> httpx.AsyncClient:
+        """Keep-Alive ulanishlarini qayta ishlatuvchi umumiy HTTP sessiya."""
+        if self._shared_client is None or self._shared_client.is_closed:
+            limits = httpx.Limits(max_keepalive_connections=40, max_connections=65)
+            self._shared_client = httpx.AsyncClient(limits=limits, timeout=8.0)
+        return self._shared_client
+
+    async def close_http_client(self) -> None:
+        """Resurslarni toza yopish."""
+        if self._shared_client and not self._shared_client.is_closed:
+            await self._shared_client.aclose()
+            self._shared_client = None
 
     def pause(self) -> None:
         """Monitoringni vaqtincha to'xtatish."""
@@ -217,104 +239,124 @@ class SourceManager:
         """
         Barcha manbalarni asinxron parallel tekshirish va
         faqat yangi, dublikatsiz metro xabarlarini ajratib olish.
+        Overlapping (bir vaqtda bir nechta) chaqiruvlarni bloklaydi va xotirani asraydi.
         """
-        start_time = time.time()
-        semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
-        
-        all_collected_items: List[NewsItem] = []
+        if self.is_scanning:
+            logger.info("Tekshiruv allaqachon bajarilmoqda. Yangi parallel chaqiruv to'xtatildi.")
+            return [], {
+                "elapsed_seconds": round(self.last_check_duration, 2),
+                "total_sources": len(self.telegram_channels) + len(self.web_sources),
+                "channels_count": len(self.telegram_channels),
+                "web_count": len(self.web_sources),
+                "raw_posts_fetched": 0,
+                "metro_alerts_found": 0,
+                "already_running": True
+            }
 
-        limits = httpx.Limits(max_keepalive_connections=35, max_connections=60)
-        async with httpx.AsyncClient(limits=limits, timeout=12.0) as client:
-            tasks = []
+        async with self.scan_lock:
+            self.is_scanning = True
+            try:
+                start_time = time.time()
+                semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
+                all_collected_items: List[NewsItem] = []
+                client = await self.get_http_client()
 
-            # 1. Telegram kanallar uchun vazifalar
-            for ch in self.telegram_channels:
-                username = ch.get("username", "")
-                name = ch.get("name", username)
-                tasks.append(self._bounded_fetch_telegram(semaphore, client, username, name))
+                tasks = []
 
-            # 2. Veb-saytlar uchun vazifalar
-            for src in self.web_sources:
-                src_type = src.get("type", "rss")
-                if src_type == "rss":
-                    tasks.append(self._bounded_fetch_rss(semaphore, client, src))
-                else:
-                    tasks.append(self._bounded_fetch_html(semaphore, client, src))
+                # 1. Telegram kanallar uchun vazifalar
+                for ch in self.telegram_channels:
+                    username = ch.get("username", "")
+                    name = ch.get("name", username)
+                    tasks.append(self._bounded_fetch_telegram(semaphore, client, username, name))
 
-            # Barcha 80 ta manbani parallel yurgizish
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+                # 2. Veb-saytlar uchun vazifalar
+                for src in self.web_sources:
+                    src_type = src.get("type", "rss")
+                    if src_type == "rss":
+                        tasks.append(self._bounded_fetch_rss(semaphore, client, src))
+                    else:
+                        tasks.append(self._bounded_fetch_html(semaphore, client, src))
 
-            for res in results:
-                if isinstance(res, list):
-                    all_collected_items.extend(res)
+                # Barcha 80 ta manbani parallel yurgizish
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        elapsed = time.time() - start_time
-        self.last_check_time = time.time()
-        self.last_check_duration = elapsed
+                for res in results:
+                    if isinstance(res, list):
+                        all_collected_items.extend(res)
 
-        logger.info(
-            f"Barcha manbalar tekshirildi ({elapsed:.2f} soniyada). "
-            f"Jami yangi olingan postlar: {len(all_collected_items)} ta."
-        )
+                elapsed = time.time() - start_time
+                self.last_check_time = time.time()
+                self.last_check_duration = elapsed
 
-        # 3. Filtrlash va Kross-dublikat tekshiruvi
-        new_metro_alerts: List[NewsItem] = []
-
-        for item in all_collected_items:
-            # 1-qadam: Avval ko'rilganmi (aniq havola bo'yicha)?
-            if storage.is_seen(item.raw_id):
-                continue
-            
-            # Kelgusi safar qayta tekshirmaslik uchun saqlab qo'yamiz
-            storage.mark_seen(item.raw_id)
-
-            # 2-qadam: Metroga tegishlimi?
-            is_metro, tags = is_metro_related(item.title, item.content)
-            if not is_metro:
-                continue
-
-            item.tags = tags
-
-            # 3-qadam: Kross-manbali dublikatmi? (boshqa kanal bu voqeani yozib bo'lganmi?)
-            is_dup, orig_source, sim = deduplicator.is_duplicate(
-                item.title, item.content, item.source_name
-            )
-            if is_dup:
                 logger.info(
-                    f"Takroriy xabar bloklandi: '{item.title[:60]}...' "
-                    f"(Asl manba: {orig_source}, o'xshashlik: {sim:.2f})"
+                    f"Barcha manbalar tekshirildi ({elapsed:.2f} soniyada). "
+                    f"Jami yangi olingan postlar: {len(all_collected_items)} ta."
                 )
-                continue
 
-            # Veb-sayt maqolalaridan fotosuratni Open Graph (og:image) orqali yuklab olish
-            if not item.image_url and item.url and item.url.startswith("http"):
-                try:
-                    async with httpx.AsyncClient(timeout=8.0) as img_client:
-                        found_img = await extract_og_image(img_client, item.url)
-                        if found_img:
-                            item.image_url = found_img
-                            logger.info(f"Veb maqoladan fotosurat ajratib olindi: {item.source_name} -> {found_img}")
-                except Exception as ie:
-                    logger.debug(f"Web rasm olishda xatolik ({item.url}): {ie}")
+                # 3. Filtrlash va Kross-dublikat tekshiruvi
+                new_metro_alerts: List[NewsItem] = []
 
-            # Yangi noyob metro hodisasi deb ro'yxatga olamiz
-            deduplicator.register_event(
-                item.title, item.content, item.source_name, item.url,
-                image_url=item.image_url or ""
-            )
-            new_metro_alerts.append(item)
-            logger.info(f"🚨 YANGI METRO XABARI TOPILDI: {item.source_name} -> {item.title[:70]}")
+                for item in all_collected_items:
+                    # 1-qadam: Avval ko'rilganmi (aniq havola bo'yicha)?
+                    if storage.is_seen(item.raw_id):
+                        continue
 
-        stats = {
-            "elapsed_seconds": round(elapsed, 2),
-            "total_sources": len(self.telegram_channels) + len(self.web_sources),
-            "channels_count": len(self.telegram_channels),
-            "web_count": len(self.web_sources),
-            "raw_posts_fetched": len(all_collected_items),
-            "metro_alerts_found": len(new_metro_alerts)
-        }
+                    # Kelgusi safar qayta tekshirmaslik uchun xotirada saqlaymiz
+                    storage.mark_seen(item.raw_id)
 
-        return new_metro_alerts, stats
+                    # 2-qadam: Metroga tegishlimi?
+                    is_metro, tags = is_metro_related(item.title, item.content)
+                    if not is_metro:
+                        continue
+
+                    item.tags = tags
+
+                    # 3-qadam: Kross-manbali dublikatmi? (boshqa kanal bu voqeani yozib bo'lganmi?)
+                    is_dup, orig_source, sim = deduplicator.is_duplicate(
+                        item.title, item.content, item.source_name
+                    )
+                    if is_dup:
+                        logger.info(
+                            f"Takroriy xabar bloklandi: '{item.title[:60]}...' "
+                            f"(Asl manba: {orig_source}, o'xshashlik: {sim:.2f})"
+                        )
+                        continue
+
+                    # Veb-sayt maqolalaridan fotosuratni Open Graph (og:image) orqali yuklab olish
+                    if not item.image_url and item.url and item.url.startswith("http"):
+                        try:
+                            found_img = await extract_og_image(client, item.url)
+                            if found_img:
+                                item.image_url = found_img
+                                logger.info(f"Veb maqoladan fotosurat ajratib olindi: {item.source_name} -> {found_img}")
+                        except Exception as ie:
+                            logger.debug(f"Web rasm olishda xatolik ({item.url}): {ie}")
+
+                    # Yangi noyob metro hodisasi deb ro'yxatga olamiz
+                    deduplicator.register_event(
+                        item.title, item.content, item.source_name, item.url,
+                        image_url=item.image_url or ""
+                    )
+                    new_metro_alerts.append(item)
+                    logger.info(f"🚨 YANGI METRO XABARI TOPILDI: {item.source_name} -> {item.title[:70]}")
+
+                # Barcha o'zgarishlarni asinxron tarzda bir marta diskka yozamiz
+                await storage.save_async()
+                await deduplicator.save_async()
+
+                stats = {
+                    "elapsed_seconds": round(elapsed, 2),
+                    "total_sources": len(self.telegram_channels) + len(self.web_sources),
+                    "channels_count": len(self.telegram_channels),
+                    "web_count": len(self.web_sources),
+                    "raw_posts_fetched": len(all_collected_items),
+                    "metro_alerts_found": len(new_metro_alerts),
+                    "already_running": False
+                }
+
+                return new_metro_alerts, stats
+            finally:
+                self.is_scanning = False
 
     async def _bounded_fetch_telegram(self, sem, client, username, name):
         async with sem:

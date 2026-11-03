@@ -158,10 +158,16 @@ def build_ai_status_text() -> str:
 def build_settings_text() -> str:
     """Sozlamalar matni."""
     status_str = "⏸️ Vaqtincha to'xtatilgan" if source_manager.is_paused else "🟢 Faol"
+    interval_sec = settings.CHECK_INTERVAL_SECONDS
+    if interval_sec >= 60 and interval_sec % 60 == 0:
+        interval_human = f"{interval_sec} soniyada ({interval_sec // 60} daqiqa)"
+    else:
+        interval_human = f"{interval_sec} soniyada"
+
     return (
         "⚙️ <b>TIZIM VA MONITORING SOZLAMALARI:</b>\n\n"
         f"• <b>Monitoring holati:</b> {status_str}\n"
-        f"• <b>Tekshirish intervali:</b> har <b>{settings.CHECK_INTERVAL_SECONDS} soniyada</b>\n"
+        f"• <b>Tekshirish intervali:</b> har <b>{interval_human}</b>\n"
         f"• <b>Antidublikat chegarasi:</b> <b>{settings.SIMILARITY_THRESHOLD * 100:.0f}%</b>\n"
         f"• <b>Parallel so'rovlar limiti:</b> <b>{settings.MAX_CONCURRENT_REQUESTS} ta</b>\n\n"
         "<i>Kerakli sozlamani quyidagi tugmalar orqali boshqaring:</i>"
@@ -725,21 +731,59 @@ async def cmd_diagnostics(message: Message, state: FSMContext) -> None:
     await ping_msg.edit_text(text, parse_mode="HTML")
 
 
-@router.message(StateFilter("*"), F.text.startswith("⏱️ Interval:") | F.text.in_(["⏱️ 30s", "⏱️ 60s", "⏱️ 120s"]))
+INTERVAL_PRESETS = {
+    "⏱️ 30s": 30,
+    "⏱️ 60s": 60,
+    "⏱️ 90s": 90,
+    "⏱️ 120s": 120,
+    "⏱️ 3 min": 180,
+    "⏱️ 5 min": 300,
+    "⏱️ 10 min": 600,
+}
+
+@router.message(
+    StateFilter("*"),
+    F.text.startswith("⏱️") | F.text.in_([
+        "30s", "60s", "90s", "120s", "3 min", "5 min", "10 min",
+        "3 minut", "5 minut", "10 minut"
+    ])
+)
 async def cmd_set_interval(message: Message, state: FSMContext) -> None:
-    """Tekshirish intervalini o'zgartirish."""
+    """Tekshirish intervalini o'zgartirish (30s, 60s, 90s, 120s, 3 min, 5 min, 10 min)."""
     await state.clear()
-    raw = message.text.replace("⏱️ Interval:", "").replace("⏱️", "").replace("s", "").strip()
-    try:
-        new_int = int(raw)
+    txt = message.text.strip()
+
+    new_int = None
+    if txt in INTERVAL_PRESETS:
+        new_int = INTERVAL_PRESETS[txt]
+    elif "min" in txt.lower():
+        digits = re.findall(r'\d+', txt)
+        if digits:
+            new_int = int(digits[0]) * 60
+    elif "s" in txt.lower() or "interval" in txt.lower():
+        digits = re.findall(r'\d+', txt)
+        if digits:
+            new_int = int(digits[0])
+
+    if new_int and 10 <= new_int <= 3600:
         settings.CHECK_INTERVAL_SECONDS = new_int
+        if new_int >= 60 and new_int % 60 == 0:
+            human_str = f"har <b>{new_int} soniyada ({new_int // 60} daqiqada)</b>"
+        else:
+            human_str = f"har <b>{new_int} soniyada</b>"
+
         await message.answer(
-            f"✅ <b>Avtomatik tekshiruv oralig'i har {new_int} soniyaga sozlandi!</b>",
+            f"✅ <b>Avtomatik tekshiruv oralig'i muvaffaqiyatli sozlandi!</b>\n\n"
+            f"⏱️ Yangi interval: {human_str}\n\n"
+            f"⚡ <i>Server endi belgilangan vaqt oralig'ida manbalarni me'yorida tekshirib boradi.</i>",
             parse_mode="HTML",
             reply_markup=get_settings_reply_keyboard(source_manager.is_paused)
         )
-    except ValueError:
-        await message.answer("⚠️ Noto'g'ri interval qiymati.", reply_markup=get_settings_reply_keyboard(source_manager.is_paused))
+    else:
+        await message.answer(
+            "⚠️ Noto'g'ri interval qiymati. Iltimos, menyudagi tugmalardan birini tanlang.",
+            reply_markup=get_settings_reply_keyboard(source_manager.is_paused)
+        )
 
 
 @router.message(StateFilter("*"), Command("keywords"))

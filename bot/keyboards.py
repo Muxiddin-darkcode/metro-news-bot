@@ -69,7 +69,13 @@ def get_settings_reply_keyboard(is_paused: bool = False) -> ReplyKeyboardMarkup:
         [
             KeyboardButton(text="⏱️ 30s", style="primary"),
             KeyboardButton(text="⏱️ 60s", style="primary"),
+            KeyboardButton(text="⏱️ 90s", style="primary"),
             KeyboardButton(text="⏱️ 120s", style="primary")
+        ],
+        [
+            KeyboardButton(text="⏱️ 3 min", style="primary"),
+            KeyboardButton(text="⏱️ 5 min", style="primary"),
+            KeyboardButton(text="⏱️ 10 min", style="primary")
         ],
         [
             KeyboardButton(text="🏷️ Kalit so'zlar", style="primary"),

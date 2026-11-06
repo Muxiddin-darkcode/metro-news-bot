@@ -18,6 +18,7 @@ import httpx
 
 from config import settings, format_uz_time
 from parsers.base import NewsItem
+from core.filter import detect_line_and_station, detect_metro_topic, is_resolution_text, is_disruption_text
 
 logger = logging.getLogger("MetroMonitor.AIAnalyzer")
 
@@ -118,31 +119,37 @@ def normalize_model_name(model: str, default_model: str) -> str:
     return m
 
 
-METRO_AI_VERIFIER_PROMPT = """Sen Toshkent Metropoliteni yangiliklari bo'yicha maxsus aqlli verifikatorisan.
-Sening yagona vazifang — berilgan post HAQIQATDAN HAM Toshkent metrosiga (bekatlar, poyezdlar, yo'nalishlar, harakat grafigi, nosozliklar, chipta narxlari, rasmiy xabarlar) tegishli ekanligini 100% ishonch bilan tekshirish.
+METRO_AI_VERIFIER_PROMPT = """Sen Toshkent Metropoliteni yangiliklari bo'yicha aqlli verifikatorisan.
+Sening asosiy vazifalaring:
+1. Berilgan post HAQIQATDAN HAM Toshkent metrosiga tegishli ekanligini 100% ishonch bilan tekshirish (is_metro: true/false).
+2. Qaysi yo'nalish (liniya) va bekatga tegishli ekanligini aniqlash.
+3. Yangilik mavzusini aniqlash.
+4. Agar post nosozlik yoki to'xtashdan so'ng harakat qayta tiklangani haqida bo'lsa, is_resolution: true deb belgilash.
 
 RAD ETILADIGAN SOXTA POSTLAR (is_metro: false):
-1. Ko'chmas mulk va uy-joy reklamalari: "metro yaqinida kvartira sotiladi", "metroga 5 daqiqalik masofa", "ijara", "narxi $...".
-2. Chet el metrosi: Moskva, Sankt-Peterburg, Parij, Pekin, Nyu-York metrosi haqidagi xabarlar (agar Toshkentga aloqasi bo'lmasa).
+1. Ko'chmas mulk va ijara reklamalari: "metro yaqinida kvartira sotiladi", "metroga 5 daqiqalik masofa", "ijara", "narxi $...".
+2. Chet el metrosi: Moskva, Sankt-Peterburg, Parij, Pekin, Nyu-York metrosi (agar Toshkentga aloqasi bo'lmasa).
 3. Sport va yengil atletika: "100 metr masofaga yugurish", "200 metr suzish", medallar, marafon.
-4. Boshqa ma'nolar: "Metro" supermarketi/do'koni, metrologiya, santimetr.
-5. Shunchaki shahar xabarlarida "metro" so'zi joylashuv ko'rsatkichi sifatida tasodifan tilga olingan bo'lsa (masalan "Bodomzor bekati yaqinidagi kafeda yong'in").
+4. Boshqa ma'nolar: "Metro" savdo markazi, metrologiya, santimetr.
+5. Shunchaki shahar xabarlarida "metro" so'zi joylashuv mo'ljali sifatida tasodifan tilga olingan bo'lsa (masalan "Minor bekati yaqinidagi kafeda yong'in").
 
 HAQIQIY METRO POSTLARI (is_metro: true):
-Toshkent metrosining o'zi, poyezdlari, yo'lovchilari, bekatlardagi texnik holatlar, harakat to'xtashi, oraliq intervallar, ta'mirlash, yangi vagonlar va rasmiy metropoliten axborotlari.
+Toshkent metrosining o'zi, poyezdlari, yo'lovchilari, bekatlardagi holatlar, harakat to'xtashi, intervallar, ta'mirlash, yangi vagonlar va rasmiy axborotlar.
 
-TOIFALAR VA BADGELAR:
-- EMERGENCY: "🔴 SHOSHILINCH: HARAKAT TO'XTATILDI" (harakat to'xtashi, avariya)
-- WARNING: "🟡 DIQQAT: HARAKAT O'ZGARISHI" (kechikish, oraliq cho'zilishi, ta'mirlash)
-- NEWS: "🟢 METRO YANGILIGI" (yangi poyezdlar, yangi bekatlar, qulayliklar)
-- INFO: "ℹ️ RASMIY AXBOROT" (raddiya, rasmiy bayonot, ish vaqti)
+LINIYALAR:
+- 🔴 Chilonzor yo'li
+- 🔵 O'zbekiston yo'li
+- 🟢 Yunusobod yo'li
+- 🟣 Yerusti halqa yo'li
 
-FAQAT QUYIDAGI IXCHAM JSON FORMATIDA JAVOB BER (ortiqcha hech narsa yozma):
+FAQAT QUYIDAGI IXCHAM JSON FORMATIDA JAVOB BER:
 {
   "is_metro": true | false,
   "confidence": 0.95,
-  "category": "EMERGENCY | WARNING | NEWS | INFO",
-  "badge": "Yuqoridagi badgelardan biri",
+  "line": "🔴 Chilonzor yo'li | 🔵 O'zbekiston yo'li | 🟢 Yunusobod yo'li | 🟣 Yerusti halqa yo'li | null",
+  "station": "Bekat nomi | null",
+  "topic": "Harakat va oraliq intervallar | To'lov va tariflar | Yangi poyezdlar | Rasmiy bayonot | Umumiy yangilik",
+  "is_resolution": true | false,
   "reason": "Qisqa sabab (1 jumla)"
 }
 """
@@ -160,9 +167,30 @@ FEW_SHOT_EXAMPLES = [
         "content": json.dumps({
             "is_metro": True,
             "confidence": 0.99,
-            "category": "EMERGENCY",
-            "badge": "🔴 SHOSHILINCH: HARAKAT TO'XTATILDI",
+            "line": "🔴 Chilonzor yo'li",
+            "station": "📌 Novza bekati",
+            "topic": "Harakat va oraliq intervallar",
+            "is_resolution": False,
             "reason": "Toshkent metrosi Novza bekatida poyezd to'xtab qolganligi haqida haqiqiy voqea."
+        }, ensure_ascii=False)
+    },
+    {
+        "role": "user",
+        "content": (
+            "Sarlavha: Chilonzor yo'lida poyezdlar harakati to'liq tiklandi\n"
+            "Matn: Novza bekatidagi nosozlik bartaraf etildi, poyezdlar amaldagi jadval bo'yicha harakatlanmoqda."
+        )
+    },
+    {
+        "role": "assistant",
+        "content": json.dumps({
+            "is_metro": True,
+            "confidence": 0.99,
+            "line": "🔴 Chilonzor yo'li",
+            "station": "📌 Novza bekati",
+            "topic": "Harakat qayta tiklandi",
+            "is_resolution": True,
+            "reason": "Nosozlik bartaraf etilib, harakat qayta tiklangani haqidagi rasmiy xabar."
         }, ensure_ascii=False)
     },
     {
@@ -177,8 +205,10 @@ FEW_SHOT_EXAMPLES = [
         "content": json.dumps({
             "is_metro": False,
             "confidence": 0.99,
-            "category": "INFO",
-            "badge": "ℹ️ RASMIY AXBOROT",
+            "line": None,
+            "station": None,
+            "topic": None,
+            "is_resolution": False,
             "reason": "Ko'chmas mulk va ijara reklamasi."
         }, ensure_ascii=False)
     },
@@ -194,16 +224,22 @@ FEW_SHOT_EXAMPLES = [
         "content": json.dumps({
             "is_metro": True,
             "confidence": 0.98,
-            "category": "NEWS",
-            "badge": "🟢 METRO YANGILIGI",
+            "line": None,
+            "station": None,
+            "topic": "Yangi poyezdlar va modernizatsiya",
+            "is_resolution": False,
             "reason": "Toshkent metropoliteni poyezdlari yangilanishi haqidagi yangilik."
         }, ensure_ascii=False)
     }
 ]
 
 
-def format_original_news_html(item: NewsItem, badge: str = "🚇 METRO XABARI") -> str:
-    """Asl manba sarlavhasi va matnini toza HTML formatida tayyorlash (AI o'zgartirishlarisiz)."""
+def format_original_news_html(
+    item: NewsItem,
+    badge: str = "🚇 METRO XABARI",
+    result: Optional['AIAnalysisResult'] = None
+) -> str:
+    """Asl manba sarlavhasi va matnini liniya, bekat va mavzu bilan toza HTML formatida tayyorlash."""
     now_str = format_uz_time(fmt="%H:%M | %d.%m.%Y")
     if item.published_at:
         try:
@@ -215,7 +251,6 @@ def format_original_news_html(item: NewsItem, badge: str = "🚇 METRO XABARI") 
 
     clean_title = html.escape(item.title.strip(), quote=False)
     clean_source = html.escape(item.source_name.strip(), quote=False)
-    clean_badge = html.escape(badge or "🚇 METRO XABARI", quote=False)
 
     raw_content = clean_raw_news_text(item.content.strip())
     content_safe = html.escape(raw_content, quote=False)
@@ -225,10 +260,38 @@ def format_original_news_html(item: NewsItem, badge: str = "🚇 METRO XABARI") 
 
     tags_str = " ".join(item.tags) if item.tags else "#metro #toshkent"
 
-    msg = (
-        f"🚇 <b>TOSHKENT METROSI | {clean_badge}</b>\n\n"
-        f"📌 <b>{clean_title}</b>\n\n"
-    )
+    # Liniya, bekat va mavzu sarlavhasini shakllantirish
+    line_val = getattr(result, "line", "") if result else ""
+    station_val = getattr(result, "station", "") if result else ""
+    topic_val = getattr(result, "topic", "") if result else ""
+    is_res = getattr(result, "is_resolution", False) if result else False
+
+    if not line_val and not station_val:
+        full_text = f"{item.title} {item.content}"
+        line_val, station_val = detect_line_and_station(full_text)
+        if not topic_val:
+            topic_val = detect_metro_topic(full_text)
+        if not is_res:
+            is_res = is_resolution_text(full_text)
+
+    header_lines = ["🚇 <b>TOSHKENT METROSI XABARI</b>"]
+    loc_parts = []
+    if line_val:
+        loc_parts.append(f"<b>{line_val}</b>")
+    if station_val:
+        loc_parts.append(f"<b>{station_val}</b>")
+
+    if loc_parts:
+        header_lines.append(" | ".join(loc_parts))
+
+    if is_res:
+        header_lines.append("🟢 <b>HARAKAT QAYTA TIKLANDI</b>")
+    elif topic_val:
+        header_lines.append(f"📂 <b>Mavzu:</b> {topic_val}")
+
+    header_block = "\n".join(header_lines)
+
+    msg = f"{header_block}\n\n📌 <b>{clean_title}</b>\n\n"
     if content_safe and content_safe.lower() != clean_title.lower():
         msg += f"{content_safe}\n\n"
 
@@ -239,7 +302,11 @@ def format_original_news_html(item: NewsItem, badge: str = "🚇 METRO XABARI") 
     return msg
 
 
-def format_original_news_caption(item: NewsItem, badge: str = "🚇 METRO XABARI") -> str:
+def format_original_news_caption(
+    item: NewsItem,
+    badge: str = "🚇 METRO XABARI",
+    result: Optional['AIAnalysisResult'] = None
+) -> str:
     """Fotosuratlar tagiga qo'yiladigan asl manba matni (1024 belgi chegarasi bilan)."""
     now_str = format_uz_time(fmt="%H:%M | %d.%m.%Y")
     if item.published_at:
@@ -252,7 +319,6 @@ def format_original_news_caption(item: NewsItem, badge: str = "🚇 METRO XABARI
 
     clean_title = html.escape(item.title.strip(), quote=False)
     clean_source = html.escape(item.source_name.strip(), quote=False)
-    clean_badge = html.escape(badge or "🚇 METRO XABARI", quote=False)
 
     raw_content = clean_raw_news_text(item.content.strip())
     content_safe = html.escape(raw_content, quote=False)
@@ -260,10 +326,37 @@ def format_original_news_caption(item: NewsItem, badge: str = "🚇 METRO XABARI
     if len(content_safe) > 550:
         content_safe = safe_truncate_words(content_safe, 550)
 
-    msg = (
-        f"🚇 <b>TOSHKENT METROSI | {clean_badge}</b>\n\n"
-        f"📌 <b>{clean_title}</b>\n\n"
-    )
+    line_val = getattr(result, "line", "") if result else ""
+    station_val = getattr(result, "station", "") if result else ""
+    topic_val = getattr(result, "topic", "") if result else ""
+    is_res = getattr(result, "is_resolution", False) if result else False
+
+    if not line_val and not station_val:
+        full_text = f"{item.title} {item.content}"
+        line_val, station_val = detect_line_and_station(full_text)
+        if not topic_val:
+            topic_val = detect_metro_topic(full_text)
+        if not is_res:
+            is_res = is_resolution_text(full_text)
+
+    header_lines = ["🚇 <b>TOSHKENT METROSI XABARI</b>"]
+    loc_parts = []
+    if line_val:
+        loc_parts.append(f"<b>{line_val}</b>")
+    if station_val:
+        loc_parts.append(f"<b>{station_val}</b>")
+
+    if loc_parts:
+        header_lines.append(" | ".join(loc_parts))
+
+    if is_res:
+        header_lines.append("🟢 <b>HARAKAT QAYTA TIKLANDI</b>")
+    elif topic_val:
+        header_lines.append(f"📂 <b>Mavzu:</b> {topic_val}")
+
+    header_block = "\n".join(header_lines)
+
+    msg = f"{header_block}\n\n📌 <b>{clean_title}</b>\n\n"
     if content_safe and content_safe.lower() != clean_title.lower():
         msg += f"{content_safe}\n\n"
 
@@ -279,6 +372,10 @@ class AIAnalysisResult:
     confidence: float = 1.0
     category: str = "NEWS"
     badge: str = "🚇 METRO XABARI"
+    line: str = ""
+    station: str = ""
+    topic: str = ""
+    is_resolution: bool = False
     title: str = ""
     summary: str = ""
     station_and_line: str = ""
@@ -292,11 +389,11 @@ class AIAnalysisResult:
 
     def to_telegram_html(self, item: NewsItem) -> str:
         """Asl sarlavha va matn bilan toza xabar matni."""
-        return format_original_news_html(item, badge=self.badge)
+        return format_original_news_html(item, badge=self.badge, result=self)
 
     def to_telegram_caption_html(self, item: NewsItem) -> str:
         """Fotosurat ostiga asl matn bilan tayyorlangan caption."""
-        return format_original_news_caption(item, badge=self.badge)
+        return format_original_news_caption(item, badge=self.badge, result=self)
 
 
 class AIAnalyzer:
@@ -505,43 +602,59 @@ class AIAnalyzer:
 
         is_metro = bool(data.get("is_metro", True))
         confidence = float(data.get("confidence", 0.9))
-        category = str(data.get("category", "NEWS")).upper()
-        badge = str(data.get("badge", "🚇 METRO XABARI")).strip()
+        ai_line = str(data.get("line") or "").strip()
+        ai_station = str(data.get("station") or "").strip()
+        ai_topic = str(data.get("topic") or "").strip()
+        ai_is_res = bool(data.get("is_resolution", False))
         reason = str(data.get("reason", "")).strip()
+
+        # Mahalliy tahlil bilan boyitish (agar AI bo'sh qoldirgan bo'lsa)
+        full_text = f"{item.title} {item.content}"
+        loc_line, loc_station = detect_line_and_station(full_text)
+        loc_topic = detect_metro_topic(full_text)
+        loc_res = is_resolution_text(full_text)
+
+        final_line = ai_line or loc_line or ""
+        final_station = ai_station or loc_station or ""
+        final_topic = ai_topic or loc_topic or "Toshkent Metropoliteni yangiligi"
+        final_res = ai_is_res or loc_res
+
+        badge = "🟢 HARAKAT QAYTA TIKLANDI" if final_res else (final_line or "🚇 METRO XABARI")
 
         return AIAnalysisResult(
             success=True,
             is_metro=is_metro,
             confidence=confidence,
-            category=category,
+            category="RESOLUTION" if final_res else "NEWS",
             badge=badge,
+            line=final_line,
+            station=final_station,
+            topic=final_topic,
+            is_resolution=final_res,
             title=item.title.strip(),
             summary=clean_raw_news_text(item.content.strip())[:350],
-            reason=reason
+            reason=reason or "AI orqali tasdiqlandi"
         )
 
     def _build_local_result(self, item: NewsItem) -> AIAnalysisResult:
-        """Mahalliy qoidalar asosidagi tezkor tasdiq."""
-        title_l = item.title.lower()
-        badge = "🚇 METRO XABARI"
-        category = "NEWS"
+        """Mahalliy aqlli qoidalar asosidagi tezkor tasdiq (liniya, bekat va mavzuni aniqlash)."""
+        full_text = f"{item.title} {item.content}"
+        line, station = detect_line_and_station(full_text)
+        topic = detect_metro_topic(full_text)
+        is_res = is_resolution_text(full_text)
 
-        if any(w in title_l for w in ["to'xtadi", "nosozlik", "kechikmoqda", "avariya", "toxtadi", "to'xtatildi"]):
-            badge = "🔴 SHOSHILINCH: HARAKAT TO'XTATILDI"
-            category = "EMERGENCY"
-        elif any(w in title_l for w in ["kechikish", "oralig'i", "grafik", "ta'mir"]):
-            badge = "🟡 DIQQAT: HARAKAT O'ZGARISHI"
-            category = "WARNING"
-        elif any(w in title_l for w in ["raddiya", "bayonot", "axborot", "rasmiy"]):
-            badge = "ℹ️ RASMIY AXBOROT"
-            category = "INFO"
+        badge = "🟢 HARAKAT QAYTA TIKLANDI" if is_res else (line or "🚇 METRO XABARI")
 
         return AIAnalysisResult(
             success=True,
             is_metro=True,
             confidence=1.0,
-            category=category,
+            category="RESOLUTION" if is_res else "NEWS",
             badge=badge,
+            line=line or "",
+            station=station or "",
+            topic=topic,
+            is_resolution=is_res,
             title=item.title.strip(),
             summary=clean_raw_news_text(item.content.strip())[:350],
             reason="Mahalliy qat'iy qoidalar orqali tasdiqlandi",

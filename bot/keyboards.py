@@ -19,21 +19,71 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
         ],
         [
             KeyboardButton(text="📰 So'nggi xabarlar", style="primary"),
-            KeyboardButton(text="📊 Tizim holati", style="primary")
+            KeyboardButton(text="🔎 Qidirish", style="primary")
+        ],
+        [
+            KeyboardButton(text="🗺️ Metro xaritasi", style="primary"),
+            KeyboardButton(text="⏰ Ish vaqti va tariflar", style="primary")
         ],
         [
             KeyboardButton(text="🌐 Manbalar", style="primary"),
             KeyboardButton(text="⚙️ Sozlamalar", style="primary")
         ],
         [
-            KeyboardButton(text="📋 Loglar", style="primary"),
-            KeyboardButton(text="🧹 Kesh", style="danger")
-        ],
-        [
-            KeyboardButton(text="❌ Panelni yopish", style="danger")
+            KeyboardButton(text="📊 Tizim holati", style="primary"),
+            KeyboardButton(text="❌ Panelni yig'ish", style="danger")
         ]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, is_persistent=False)
+
+
+def get_cancel_search_keyboard() -> ReplyKeyboardMarkup:
+    """Qidiruv rejimida bekor qilish tugmasi."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="◀️ Asosiy menyu", style="danger")]
+        ],
+        resize_keyboard=True,
+        is_persistent=False
+    )
+
+
+def get_metro_map_inline_keyboard() -> InlineKeyboardMarkup:
+    """Metro xaritasi va interaktiv marshrut havolalari."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🗺️ Tashmetro Interaktiv Xaritasi",
+                    url="https://tashmetro.uz/uz/interactive-map"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📱 Yandex Metro (Toshkent sxemasi)",
+                    url="https://yandex.uz/metro/tashkent"
+                )
+            ]
+        ]
+    )
+
+
+def get_metro_info_inline_keyboard() -> InlineKeyboardMarkup:
+    """Tariflar va rasmiy portal havolalari."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💳 ATTO Portali",
+                    url="https://atto.uz"
+                ),
+                InlineKeyboardButton(
+                    text="🚇 Tashmetro Rasmiy Sayti",
+                    url="https://tashmetro.uz"
+                )
+            ]
+        ]
+    )
 
 
 def get_collapsed_keyboard() -> ReplyKeyboardMarkup:

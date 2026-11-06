@@ -245,10 +245,74 @@ class TestStrictMetroMonitoring(unittest.TestCase):
         self.assertIn("Toshkent metrosida 5 vagonli poyezdlar sinovdan o'tkazildi", html_text)
         self.assertIn("Metropoliten mutaxassislari yangi vagonlarning harakat xavfsizligini tekshirdi.", html_text)
         self.assertIn("Gazeta.uz", html_text)
-        self.assertIn("🟢 METRO YANGILIGI", html_text)
+        self.assertIn("TOSHKENT METROSI XABARI", html_text)
+        self.assertIn("Yangi poyezdlar va modernizatsiya", html_text)
 
         self.assertIn("Toshkent metrosida 5 vagonli poyezdlar sinovdan o'tkazildi", caption_text)
         self.assertIn("Gazeta.uz", caption_text)
+
+    def test_line_and_station_detection(self):
+        from core.filter import detect_line_and_station, detect_metro_topic, is_disruption_text, is_resolution_text
+
+        # 1. Chilonzor yo'li & Novza bekati
+        l1, s1 = detect_line_and_station("Novza bekatida poyezd to'xtab qoldi")
+        self.assertEqual(l1, "🔴 Chilonzor yo'li")
+        self.assertEqual(s1, "📌 Novza bekati")
+        self.assertTrue(is_disruption_text("Novza bekatida poyezd to'xtab qoldi"))
+
+        # 2. O'zbekiston yo'li & Beruniy bekati
+        l2, s2 = detect_line_and_station("Beruniy bekatida yangi turniketlar o'rnatildi")
+        self.assertEqual(l2, "🔵 O'zbekiston yo'li")
+        self.assertEqual(s2, "📌 Beruniy bekati")
+
+        # 3. Yunusobod yo'li & Minor bekati
+        l3, s3 = detect_line_and_station("Minor bekatida eskalator ta'mirlanmoqda")
+        self.assertEqual(l3, "🟢 Yunusobod yo'li")
+        self.assertEqual(s3, "📌 Minor bekati")
+
+        # 4. Yerusti halqa yo'li & Texnopark bekati
+        l4, s4 = detect_line_and_station("Texnopark bekatidan poyezdlar harakati qayta tiklandi")
+        self.assertEqual(l4, "🟣 Yerusti halqa yo'li")
+        self.assertEqual(s4, "📌 Texnopark (1-bekat) bekati")
+        self.assertTrue(is_resolution_text("Texnopark bekatidan poyezdlar harakati qayta tiklandi"))
+
+        # 5. Mavzu aniqlash (Tarif)
+        topic = detect_metro_topic("Metroda ATTO kartasi bilan yurish tarifi 1700 so'm")
+        self.assertIn("To'lov", topic)
+
+    def test_resolution_bypasses_deduplication_and_search(self):
+        test_cache = Path("data/test_resolution_dedup.json")
+        if test_cache.exists():
+            test_cache.unlink()
+
+        dedup = CrossSourceDeduplicator(filepath=test_cache, threshold=0.60)
+
+        # 1. Nosozlik xabari (Disruption)
+        t1 = "Chilonzor yo'lida poyezd to'xtab qoldi"
+        c1 = "Novza bekatida texnik nosozlik tufayli harakat vaqtincha to'xtatildi."
+        is_dup_1, _, _ = dedup.is_duplicate(t1, c1, "Daryo")
+        self.assertFalse(is_dup_1)
+        dedup.register_event(t1, c1, "Daryo", "https://daryo.uz/1", line="🔴 Chilonzor yo'li", station="📌 Novza bekati")
+
+        # 2. Ayni nosozlik takrori boshqa manbadan (Duplicate)
+        t2 = "Chilonzor yo'nalishida poyezdlar to'xtab qoldi: nosozlik"
+        c2 = "Toshkent metrosining Novza bekatida poyezd harakati to'xtab qoldi."
+        is_dup_2, orig_2, _ = dedup.is_duplicate(t2, c2, "Kun.uz")
+        self.assertTrue(is_dup_2, "Takroriy xabar dublikat sifatida tutilishi shart!")
+
+        # 3. Harakat tiklangani haqidagi xabar (Resolution)
+        t3 = "Chilonzor yo'lida poyezdlar harakati to'liq tiklandi"
+        c3 = "Novza bekatidagi texnik nosozlik bartaraf etildi, poyezdlar odatiy rejimda yurmoqda."
+        is_dup_3, _, _ = dedup.is_duplicate(t3, c3, "Gazeta.uz")
+        self.assertFalse(is_dup_3, "Tiklanish xabari dublikat filtridan o'tib ketishi shart!")
+
+        # 4. Qidiruv testi (Search)
+        search_res = dedup.search_events("Novza")
+        self.assertGreaterEqual(len(search_res), 1)
+        self.assertIn("Novza", search_res[0].get("station", "") or search_res[0].get("content", ""))
+
+        if test_cache.exists():
+            test_cache.unlink()
 
 if __name__ == "__main__":
     unittest.main()

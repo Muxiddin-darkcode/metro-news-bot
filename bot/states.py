@@ -10,3 +10,8 @@ class AdminStates(StatesGroup):
     waiting_for_test_source = State()
     waiting_for_new_keyword = State()
     waiting_for_remove_keyword = State()
+
+
+class SearchStates(StatesGroup):
+    """Metro yangiliklari qidiruv holati (FSM)."""
+    waiting_for_query = State()

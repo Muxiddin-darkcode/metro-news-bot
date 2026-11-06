@@ -31,7 +31,7 @@ from core.filter import (
 from parsers.base import NewsItem
 from parsers.manager import source_manager
 from bot.notifier import send_metro_alert, download_photo_file
-from bot.states import AdminStates
+from bot.states import AdminStates, SearchStates
 from core.ai_analyzer import ai_analyzer, safe_truncate_words
 from bot.keyboards import (
     get_main_keyboard,
@@ -43,6 +43,9 @@ from bot.keyboards import (
     get_cache_reply_keyboard,
     get_keywords_reply_keyboard,
     get_cancel_keyboard,
+    get_cancel_search_keyboard,
+    get_metro_map_inline_keyboard,
+    get_metro_info_inline_keyboard,
     post_source_url_kb
 )
 
@@ -53,9 +56,9 @@ router = Router()
 # =========================================================================
 
 def build_dashboard_text() -> str:
-    """Admin Dashboard asosiy ekrani uchun ixcham va to'liq ma'lumot."""
+    """Asosiy ekran uchun ixcham va to'liq ma'lumot."""
     status_icon = "⏸️ To'xtatilgan" if source_manager.is_paused else "🟢 24/7 Faol"
-    ai_icon = "🟢 Faol" if settings.AI_ENABLED else "⏸️ O'chirilgan"
+    ai_icon = "🟢 Faol (100% asl matn)" if settings.AI_ENABLED else "⏸️ O'chirilgan"
     last_time = "Hali yo'q"
     if source_manager.last_check_time > 0:
         last_time = format_uz_time(source_manager.last_check_time, "%H:%M:%S")
@@ -65,14 +68,14 @@ def build_dashboard_text() -> str:
     total_sources = tg_count + web_count
 
     return (
-        "🚇 <b>TOSHKENT METROPOLITENI MONITORING TIZIMI</b>\n\n"
+        "🚇 <b>TOSHKENT METROPOLITENI MONITORING BOTI</b>\n\n"
         f"• <b>Monitoring holati:</b> {status_icon}\n"
-        f"• <b>AI Tahlilchi (Dual AI):</b> {ai_icon}\n"
+        f"• <b>AI Verifikator:</b> {ai_icon}\n"
         f"• <b>Kuzatilayotgan manbalar:</b> <b>{total_sources} ta</b> (📱 {tg_count} kanal, 💻 {web_count} sayt)\n"
         f"• <b>Avtomatik tekshiruv:</b> har {settings.CHECK_INTERVAL_SECONDS} soniyada\n"
         f"• <b>Oxirgi skaner:</b> {last_time} ({source_manager.last_check_duration:.1f}s)\n"
         f"• <b>Keshdagi postlar:</b> {storage.count} ta | <b>Dublikat xotirasi:</b> {len(deduplicator._history)} ta\n\n"
-        "<i>Pastdagi boshqaruv menyusidan kerakli bo'limni tanlang:</i>"
+        "<i>Pastdagi menyudan kerakli bo'limni tanlang:</i>"
     )
 
 
@@ -102,7 +105,7 @@ def build_status_text() -> str:
         f"🧠 <b>Antidublikat chegarasi:</b> {settings.SIMILARITY_THRESHOLD * 100:.0f}%\n"
         f"🗂️ <b>Keshdagi ko'rilgan postlar:</b> {storage.count} ta\n"
         f"🧠 <b>Antidublikat xotirasi (oxirgi 24 soat):</b> {len(deduplicator._history)} ta voqea\n"
-        f"👥 <b>Ruxsat etilgan adminlar:</b> {len(settings.admin_id_list)} ta"
+        f"👥 <b>Ogohlantirish oluvchilar:</b> {len(settings.admin_id_list)} ta"
         f"{group_info}\n\n"
         f"<i>Tizim barcha {total_sources} ta nufuzli manbani parallel ravishda barqaror kuzatib bormoqda.</i>"
     )
@@ -123,10 +126,13 @@ def build_recent_news_text() -> str:
         t_str = format_uz_time(ev.get("timestamp", 0), "%H:%M | %d.%m")
         title = html.escape(ev.get("title") or ev.get("ai_title", "Sarlavhasiz"), quote=False)
         source = html.escape(ev.get("source", "Noma'lum"), quote=False)
-        badge = ev.get("ai_badge") or "🚇 METRO"
+        line = ev.get("line") or ""
+        station = ev.get("station") or ""
+        badge = ev.get("ai_badge") or line or "🚇 METRO"
+        st_info = f" | {station}" if station else ""
         url = ev.get("url", "")
         url_link = f' <a href="{url}">[Asl manba]</a>' if url else ""
-        lines.append(f"<b>{i}. {badge}</b> [{t_str}] <b>{source}</b>:\n{title}{url_link}\n")
+        lines.append(f"<b>{i}. {badge}{st_info}</b> [{t_str}] <b>{source}</b>:\n{title}{url_link}\n")
 
     return "\n".join(lines)
 
@@ -203,7 +209,7 @@ def build_cache_text() -> str:
 # =========================================================================
 
 @router.message(StateFilter("*"), Command("close", "hide"))
-@router.message(StateFilter("*"), F.text.in_(["❌ Panelni yopish", "Panelni yopish", "❌ Yopish", "Yopish"]) | F.text.lower().contains("yopish"))
+@router.message(StateFilter("*"), F.text.in_(["❌ Panelni yig'ish", "Panelni yig'ish", "❌ Panelni yopish", "Panelni yopish", "❌ Yopish", "Yopish", "❌ Panelni yigish", "Panelni yigish"]) | F.text.lower().contains("yopish") | F.text.lower().contains("yig'ish") | F.text.lower().contains("yigish"))
 async def cmd_close_panel(message: Message, state: FSMContext) -> None:
     """Boshqaruv panelini yig'ish (bitta ixcham tugma holatiga keltirish)."""
     await state.clear()
@@ -416,6 +422,147 @@ async def cmd_recent_news(message: Message, state: FSMContext) -> None:
         parse_mode="HTML",
         disable_web_page_preview=True,
         reply_markup=get_main_keyboard()
+    )
+
+
+def format_search_results_text(query: str, events: List[Dict]) -> str:
+    """Qidiruv natijalarini chiroyli matn shaklida formatlash."""
+    q_safe = html.escape(query, quote=False)
+    if not events:
+        return (
+            f"🔎 <b>QIDIRUV NATIJALARI:</b> <i>«{q_safe}»</i>\n\n"
+            "❌ <i>Afsuski, ushbu so'rov bo'yicha so'nggi 24 soat ichida metro xabarlari topilmadi.\n\n"
+            "Boshqa bekat nomi yoki kalit so'z (masalan: Chilonzor, Novza, tarif, 5 vagon) bilan qayta qidirib ko'ring.</i>"
+        )
+
+    lines = [f"🔎 <b>QIDIRUV NATIJALARI:</b> <i>«{q_safe}»</i> (Topildi: {len(events)} ta)\n"]
+    for i, ev in enumerate(events, 1):
+        t_str = format_uz_time(ev.get("timestamp", 0), "%H:%M | %d.%m")
+        title = html.escape(ev.get("title") or ev.get("ai_title", "Sarlavhasiz"), quote=False)
+        source = html.escape(ev.get("source", "Manba"), quote=False)
+        line = ev.get("line") or ""
+        station = ev.get("station") or ""
+        badge = ev.get("ai_badge") or line or "🚇 METRO"
+        st_info = f" | {station}" if station else ""
+        url = ev.get("url", "")
+        url_link = f' <a href="{url}">[Asl manba]</a>' if url else ""
+        lines.append(f"<b>{i}. {badge}{st_info}</b> [{t_str}] <b>{source}</b>:\n{title}{url_link}\n")
+
+    return "\n".join(lines)
+
+
+@router.message(StateFilter("*"), Command("search", "find"))
+@router.message(StateFilter("*"), F.text.in_(["🔎 Qidirish", "Qidirish"]))
+async def cmd_search_news(message: Message, state: FSMContext) -> None:
+    """Yangiliklar ichidan bekat yoki kalit so'z bo'yicha qidirish."""
+    cmd_args = ""
+    if message.text:
+        parts = message.text.split(maxsplit=1)
+        if len(parts) > 1 and parts[0].startswith("/"):
+            cmd_args = parts[1].strip()
+
+    if cmd_args:
+        await state.clear()
+        results = deduplicator.search_events(cmd_args, limit=10)
+        await message.answer(
+            format_search_results_text(cmd_args, results),
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+            reply_markup=get_main_keyboard()
+        )
+        return
+
+    await state.set_state(SearchStates.waiting_for_query)
+    await message.answer(
+        "🔎 <b>METRO XABARLARINI QIDIRISH</b>\n\n"
+        "Qidirmoqchi bo'lgan bekat nomi, yo'nalish yoki kalit so'zni kiriting:\n"
+        "<i>(Masalan: Novza, Chilonzor, Beruniy, tarif, 5 vagon, nosozlik)</i>",
+        parse_mode="HTML",
+        reply_markup=get_cancel_search_keyboard()
+    )
+
+
+@router.message(SearchStates.waiting_for_query)
+async def process_search_query(message: Message, state: FSMContext) -> None:
+    """Foydalanuvchi kiritgan qidiruv so'rovini qayta ishlash."""
+    query = (message.text or "").strip()
+    if not query or query.startswith("/") or query in ["◀️ Asosiy menyu", "❌ Bekor qilish", "Bekor qilish"]:
+        await state.clear()
+        await cmd_main_menu(message, state)
+        return
+
+    results = deduplicator.search_events(query, limit=10)
+    await state.clear()
+    await message.answer(
+        format_search_results_text(query, results),
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+        reply_markup=get_main_keyboard()
+    )
+
+
+METRO_MAP_TEXT = (
+    "🗺️ <b>TOSHKENT METROPOLITENI YO'NALISHLARI VA SXEMASI</b>\n\n"
+    "🔴 <b>Chilonzor yo'li (Qizil liniya - 17 ta bekat):</b>\n"
+    "Buyuk Ipak Yo'li — Pushkin — Hamid Olimjon — Amir Temur xiyoboni — Mustaqillik maydoni — Paxtakor — Xalqlar do'stligi — Milliy bog' — Novza — Mirzo Ulug'bek — Chilonzor — Olmazor — Choshtepa — O'zgarish — Sirg'ali — Yangihayot — Chinor\n\n"
+    "🔵 <b>O'zbekiston yo'li (Ko'k liniya - 11 ta bekat):</b>\n"
+    "Beruniy — Tinchlik — Chorsu — G'afur G'ulom — Alisher Navoiy — O'zbekiston — Kosmonavtlar — Oybek — Toshkent (Vokzal) — Mashinasozlar — Do'stlik\n\n"
+    "🟢 <b>Yunusobod yo'li (Yashil liniya - 8 ta bekat):</b>\n"
+    "Turkiston — Shahriston — Bodomzor — Minor — Abdulla Qodiriy — Yunus Rajabiy — Ming O'rik\n\n"
+    "🟣 <b>Yerusti halqa yo'li (30 yillik yo'li - 14 ta bekat):</b>\n"
+    "Texnopark (1) — Yashnobod (2) — Tuzel (3) — Olmos (4) — Rohat (5) — Yangiobod (6) — Qo'yliq (7) — Matonat (8) — Qiyot (9) — Tolariq (10) — Xonobod (11) — Quruvchilar (12) — Turon (13) — Qipchoq (14)\n\n"
+    "🔄 <b>O'tish (Peresadka) bekatlari:</b>\n"
+    "• Paxtakor 🔁 Alisher Navoiy\n"
+    "• Amir Temur xiyoboni 🔁 Yunus Rajabiy\n"
+    "• Oybek 🔁 Ming O'rik\n"
+    "• Do'stlik 🔁 Texnopark (1-bekat)\n"
+    "• Chinor 🔁 Qipchoq (14-bekat)\n\n"
+    "<i>Interaktiv xaritadan marshrut tanlash uchun quyidagi tugmani bosing:</i>"
+)
+
+
+@router.message(StateFilter("*"), Command("map", "sxema", "xarita"))
+@router.message(StateFilter("*"), F.text.in_(["🗺️ Metro xaritasi", "Metro xaritasi", "Sxema", "Xarita"]))
+async def cmd_metro_map(message: Message, state: FSMContext) -> None:
+    """Toshkent Metropoliteni rasmiy sxemasi va marshrut ma'lumotlari."""
+    await state.clear()
+    await message.answer(
+        METRO_MAP_TEXT,
+        parse_mode="HTML",
+        reply_markup=get_metro_map_inline_keyboard()
+    )
+
+
+METRO_INFO_TEXT = (
+    "⏰ <b>TOSHKENT METROSI ISH VAQTI VA TARIFLAR</b>\n\n"
+    "🕒 <b>Harakatlanish vaqtlari:</b>\n"
+    "• <b>Metro har kuni:</b> <code>05:00 dan 00:00 gacha</code> uzluksiz ishlaydi.\n"
+    "• <b>Yerusti halqa yo'li:</b> <code>05:00 dan 23:00 gacha</code> xizmat ko'rsatadi.\n\n"
+    "⏱️ <b>Tig'iz vaqtlardagi oraliq intervallar (07:30-09:30 | 17:00-19:30):</b>\n"
+    "🔴 Chilonzor yo'li: 1.5 - 2.5 daqiqa\n"
+    "🔵 O'zbekiston yo'li: 3 - 4 daqiqa\n"
+    "🟢 Yunusobod yo'li: 4 - 5 daqiqa\n"
+    "🟣 Yerusti halqa yo'li: 7 - 9 daqiqa\n\n"
+    "💳 <b>Yo'l haqi to'lov tariflari:</b>\n"
+    "• <b>ATTO transport kartasi:</b> <code>1 700 so'm</code>\n"
+    "• <b>Bank kartalari (Humo, Uzcard, Visa, Mastercard):</b> <code>1 700 so'm</code>\n"
+    "• <b>Bir martalik QR-kodli qog'oz chipta:</b> <code>2 000 so'm</code>\n\n"
+    "🔄 <b>1 soat ichida qayta minish (ATTO tariflari):</b>\n"
+    "• 1-avtobusdan metroga o'tish: <code>1 000 so'm</code>\n"
+    "• 2-marta va undan keyingi o'tishlar: <code>0 so'm (Mutlaqo bepul)</code>\n\n"
+    "👶 <i>7 yoshgacha bo'lgan bolalar uchun metroda yurish bepul.</i>"
+)
+
+
+@router.message(StateFilter("*"), Command("info", "hours", "tarif", "ishvaqti"))
+@router.message(StateFilter("*"), F.text.in_(["⏰ Ish vaqti va tariflar", "Ish vaqti va tariflar", "Tariflar", "Ish vaqti"]))
+async def cmd_metro_info(message: Message, state: FSMContext) -> None:
+    """Ish vaqti va to'lov tariflari haqida to'liq ma'lumot."""
+    await state.clear()
+    await message.answer(
+        METRO_INFO_TEXT,
+        parse_mode="HTML",
+        reply_markup=get_metro_info_inline_keyboard()
     )
 
 
@@ -707,7 +854,7 @@ async def cmd_diagnostics(message: Message, state: FSMContext) -> None:
         f"🕒 <b>O'zbekiston joriy vaqti:</b> <code>{now_uz}</code>\n"
         f"🟢 <b>Monitoring holati:</b> {'⏸️ Toxtatilgan' if source_manager.is_paused else '24/7 Faol'}\n"
         f"🌐 <b>Kuzatilayotgan manbalar:</b> {total_sources} ta\n"
-        f"👥 <b>Ulangan adminlar:</b> {admin_count} ta\n"
+        f"👥 <b>Ogohlantirish oluvchilar:</b> {admin_count} ta\n"
         f"📢 <b>Ulangan guruhlar:</b> {group_count} ta\n"
         f"🗂️ <b>Xotiradagi kesh:</b> {storage.count} ta xabar\n"
         f"🧠 <b>Antidublikat xotirasi:</b> {len(deduplicator._history)} ta voqea\n\n"

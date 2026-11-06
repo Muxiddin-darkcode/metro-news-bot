@@ -6,6 +6,7 @@ import asyncio
 from typing import Set, List, Dict, Tuple, Optional
 from pathlib import Path
 from config import settings
+from core.filter import is_disruption_text, is_resolution_text
 
 logger = logging.getLogger("MetroMonitor.Deduplicator")
 
@@ -151,6 +152,8 @@ class CrossSourceDeduplicator:
     def is_duplicate(self, title: str, content: str, source_name: str) -> Tuple[bool, Optional[str], float]:
         """
         Xabar boshqa manba tomonidan avval yoritilgan ayni bir xil voqeami yoki yo'qligini tekshiradi.
+        Agar yangi xabar avvalgi nosozlikdan so'ng harakat qayta tiklangani haqida bo'lsa (Resolution),
+        dublikat filtri chetlab o'tiladi va xabar o'tkaziladi.
         """
         full_text = f"{title} {content}"
         new_tokens = self.tokenize(full_text)
@@ -158,6 +161,7 @@ class CrossSourceDeduplicator:
         if not new_tokens or len(new_tokens) < 3:
             return False, None, 0.0
 
+        is_curr_res = is_resolution_text(full_text)
         now = time.time()
         max_score = 0.0
         dup_source = None
@@ -181,8 +185,19 @@ class CrossSourceDeduplicator:
                 max_score = combined_score
                 dup_source = item.get("source", "Boshqa manba")
 
-            # Chegaradan o'tsa va yetarlicha so'z mos tushsa — bu dublikat!
+            # Chegaradan o'tsa va yetarlicha so'z mos tushsa:
             if (combined_score >= self.threshold or (overlap >= 0.65 and inter_count >= 4)):
+                # Agar yangi xabar harakat tiklangani haqida bo'lsa (resolution) va
+                # avvalgi post nosozlik/to'xtash haqida bo'lsa — bu dublikat emas, ijobiy yangilanish!
+                stored_full = f"{item.get('title', '')} {item.get('content', '')}"
+                is_prev_disrupt = item.get("is_disruption", False) or is_disruption_text(stored_full)
+                if is_curr_res and is_prev_disrupt:
+                    logger.info(
+                        f"🟢 Tiklanish (Resolution) xabari aniqlandi! Avvalgi to'xtash xabaridan so'ng "
+                        f"harakat tiklangani sababli dublikat filtri chetlab o'tildi. Asl manba: {dup_source}"
+                    )
+                    return False, dup_source, combined_score
+
                 logger.info(
                     f"Kross-dublikat aniqlandi! Yangi manba: '{source_name}', "
                     f"Asl manba: '{dup_source}', Ball: {combined_score:.2f} (Mos so'zlar: {inter_count})"
@@ -200,7 +215,11 @@ class CrossSourceDeduplicator:
         ai_title: str = "",
         ai_summary: str = "",
         ai_badge: str = "",
-        image_url: str = ""
+        image_url: str = "",
+        line: str = "",
+        station: str = "",
+        topic: str = "",
+        is_resolution: bool = False
     ) -> Dict:
         """Yangi noyob metro voqeasini xotiraga qayd qilish."""
         full_text = f"{title} {content}"
@@ -217,7 +236,12 @@ class CrossSourceDeduplicator:
             "ai_title": ai_title,
             "ai_summary": ai_summary,
             "ai_badge": ai_badge,
-            "image_url": image_url
+            "image_url": image_url,
+            "line": line,
+            "station": station,
+            "topic": topic,
+            "is_resolution": is_resolution or is_resolution_text(full_text),
+            "is_disruption": is_disruption_text(full_text)
         }
         self._history.append(event_data)
 
@@ -239,6 +263,9 @@ class CrossSourceDeduplicator:
         ai_badge: str,
         image_url: str = "",
         station: str = "",
+        line: str = "",
+        topic: str = "",
+        is_resolution: bool = False,
         status: str = "",
         advice: str = "",
         full_html: str = "",
@@ -253,7 +280,14 @@ class CrossSourceDeduplicator:
                 if image_url:
                     item["image_url"] = image_url
                 if station:
+                    item["station"] = station
                     item["ai_station"] = station
+                if line:
+                    item["line"] = line
+                if topic:
+                    item["topic"] = topic
+                if is_resolution:
+                    item["is_resolution"] = True
                 if status:
                     item["ai_status"] = status
                 if advice:
@@ -265,6 +299,36 @@ class CrossSourceDeduplicator:
                 self._dirty = True
                 self._save()
                 break
+
+    def search_events(self, query: str, limit: int = 8) -> List[Dict]:
+        """Antidublikat xotirasidan bekat nomi yoki kalit so'z bo'yicha qidirish."""
+        if not query or not query.strip():
+            return []
+
+        q = query.strip().lower()
+        q_no_apos = q.replace("'", "")
+        results = []
+
+        for item in reversed(self._history):
+            searchable_fields = [
+                item.get("title", ""),
+                item.get("content", ""),
+                item.get("ai_title", ""),
+                item.get("ai_summary", ""),
+                item.get("station", ""),
+                item.get("line", ""),
+                item.get("topic", ""),
+                item.get("source", "")
+            ]
+            haystack = " ".join(searchable_fields).lower()
+            haystack_no_apos = haystack.replace("'", "")
+
+            if q in haystack or q_no_apos in haystack_no_apos:
+                results.append(item)
+                if len(results) >= limit:
+                    break
+
+        return results
 
     def get_recent_events(self, limit: int = 10) -> List[Dict]:
         """Oxirgi qayd etilgan metro hodisalari ro'yxatini qaytaradi."""

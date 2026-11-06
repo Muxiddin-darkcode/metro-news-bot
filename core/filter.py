@@ -1,7 +1,7 @@
 import re
 import json
 from pathlib import Path
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from config import DATA_DIR
 
 CUSTOM_KEYWORDS_FILE = DATA_DIR / "custom_keywords.json"
@@ -81,7 +81,97 @@ METRO_EXPLICIT_PATTERNS = [
     r'\bвагон[а-я]{0,3}\s+метро\b'
 ]
 
-# Bekatlar (FAQAT "bekat", "бекат", "станция" so'zi bilan birgalikda)
+# Toshkent Metropolitenining 4 ta rasmiy liniyasi va barcha 50+ bekatlari ma'lumotlar bazasi
+METRO_LINES_INFO = {
+    "chilonzor": {
+        "name": "🔴 Chilonzor yo'li",
+        "keywords": [
+            "chilonzor yo'li", "чилонзор йўли", "chilonzor yo'nalishi", "чилонзор йўналиши",
+            "chilonzor liniyasi", "чилонзор линияси", "чиланзарская линия", "чиланзарской", "chilonzor metro"
+        ],
+        "stations": [
+            ("Buyuk Ipak Yo'li", ["buyuk ipak yo'li", "буюк ипак йўли", "буюк ипак йули", "buyuk ipak yoli", "максим горький"]),
+            ("Pushkin", ["pushkin bekati", "пушкин бекати", "станция пушкина", "пушкин"]),
+            ("Hamid Olimjon", ["hamid olimjon", "ҳомид олимжон", "хамид олимджан", "хамида алимджана"]),
+            ("Amir Temur xiyoboni", ["amir temur xiyoboni", "амир темур хиёбони", "amir temur bekati", "амир темур бекати", "станция амир темур", "сквер"]),
+            ("Mustaqillik maydoni", ["mustaqillik maydoni", "мустақиллик майдони", "площадь мустакиллик", "площадь ленина"]),
+            ("Paxtakor", ["paxtakor", "пахтакор"]),
+            ("Xalqlar do'stligi", ["xalqlar do'stligi", "халқлар дўстлиги", "дружба народов", "дружбы народов", "bunyodkor bekati", "бунёдкор"]),
+            ("Milliy bog'", ["milliy bog'", "миллий боғ", "milliy bog", "миллий бог", "национальный парк", "комсомольская"]),
+            ("Novza", ["novza", "новза", "hamza bekati", "ҳамза бекати"]),
+            ("Mirzo Ulug'bek", ["mirzo ulug'bek bekati", "мирзо улуғбек бекати", "мирзо улугбек", "50 лет ссср"]),
+            ("Chilonzor", ["chilonzor bekati", "чилонзор бекати", "станция чилонзор"]),
+            ("Olmazor", ["olmazor bekati", "олмазор бекати", "станция алмазар", "собир раҳимов", "sobir rahimov"]),
+            ("Choshtepa", ["choshtepa", "чоштепа"]),
+            ("O'zgarish", ["o'zgarish bekati", "ўзгариш бекати", "узгариш"]),
+            ("Sirg'ali", ["sirg'ali bekati", "сирғали бекати", "sergeli bekati", "сергели бекати", "станция сергели"]),
+            ("Yangihayot", ["yangihayot bekati", "янгиҳаёт бекати", "янгихаёт"]),
+            ("Chinor", ["chinor bekati", "чинор бекати", "станция чинор"])
+        ]
+    },
+    "ozbekiston": {
+        "name": "🔵 O'zbekiston yo'li",
+        "keywords": [
+            "o'zbekiston yo'li", "ўзбекистон йўли", "ozbekiston yoli", "o'zbekiston yo'nalishi",
+            "ўзбекистон йўналиши", "o'zbekiston liniyasi", "ўзбекистон линияси", "узбекистанская линия", "узбекистанской"
+        ],
+        "stations": [
+            ("Beruniy", ["beruniy", "беруний", "беруни"]),
+            ("Tinchlik", ["tinchlik bekati", "тинчлик бекати", "станция тинчлик"]),
+            ("Chorsu", ["chorsu", "чорсу"]),
+            ("G'afur G'ulom", ["g'afur g'ulom", "ғафур ғулом", "gafur gulom", "гафур гулям"]),
+            ("Alisher Navoiy", ["alisher navoiy", "алишер навоий", "алишер навои"]),
+            ("O'zbekiston", ["o'zbekiston bekati", "ўзбекистон бекати", "станция узбекистан"]),
+            ("Kosmonavtlar", ["kosmonavtlar", "космонавтлар", "космонавтов", "проспект космонавтов"]),
+            ("Oybek", ["oybek", "ойбек", "айбек"]),
+            ("Toshkent", ["toshkent bekati", "тошкент бекати", "станция ташкент", "северный вокзал"]),
+            ("Mashinasozlar", ["mashinasozlar", "машинасозлар", "машиностроителей", "ташсельмаш"]),
+            ("Do'stlik", ["do'stlik bekati", "дўстлик бекати", "дустлик бекати", "станция дустлик", "чкалов", "chkalov"])
+        ]
+    },
+    "yunusobod": {
+        "name": "🟢 Yunusobod yo'li",
+        "keywords": [
+            "yunusobod yo'li", "юнусобод йўли", "yunusobod yo'nalishi", "юнусобод йўналиши",
+            "yunusobod liniyasi", "юнусобод линияси", "юнусабадская линия", "юнусабадской", "yunusobod metro"
+        ],
+        "stations": [
+            ("Turkiston", ["turkiston", "туркистон", "туркестан"]),
+            ("Shahriston", ["shahriston", "шаҳристон", "шахристан", "ҳабиб абдуллаев", "habib abdullayev"]),
+            ("Bodomzor", ["bodomzor", "бодомзор", "бадамзар"]),
+            ("Minor", ["minor bekati", "minor", "минор бекати", "минор", "станция минор"]),
+            ("Abdulla Qodiriy", ["abdulla qodiriy", "абдулла қодирий", "абдулла кадыри"]),
+            ("Yunus Rajabiy", ["yunus rajabiy", "юнус ражабий", "юнус раджаби"]),
+            ("Ming O'rik", ["ming o'rik", "минг ўрик", "ming orik", "минг урик"])
+        ]
+    },
+    "halqa": {
+        "name": "🟣 Yerusti halqa yo'li",
+        "keywords": [
+            "halqa yo'li", "ҳалқа йўли", "yerusti halqa yo'li", "ерусти ҳалқа йўли",
+            "yerusti halqa", "yerusti metro", "yerusti metrosi", "ерусти метро",
+            "halqa liniyasi", "ҳалқа линияси", "кольцевая линия", "кольцевой линии", "30 yilligi yo'li", "30 йиллиги"
+        ],
+        "stations": [
+            ("Texnopark (1-bekat)", ["texnopark", "технопарк", "1-bekat", "1-бекат", "do'stlik-2", "дўстлик-2"]),
+            ("Yashnobod (2-bekat)", ["yashnobod bekati", "яшнобод бекати", "2-bekat", "2-бекат"]),
+            ("Tuzel (3-bekat)", ["tuzel bekati", "тузел бекати", "3-bekat", "3-бекат"]),
+            ("Olmos (4-bekat)", ["olmos bekati", "олмос бекати", "4-bekat", "4-бекат"]),
+            ("Rohat (5-bekat)", ["rohat bekati", "роҳат бекати", "рохат бекати", "5-bekat", "5-бекат"]),
+            ("Yangiobod (6-bekat)", ["yangiobod bekati", "янгиобод бекати", "6-bekat", "6-бекат"]),
+            ("Qo'yliq (7-bekat)", ["qo'yliq bekati", "қўйлиқ бекати", "куйлюк бекати", "7-bekat", "7-бекат"]),
+            ("Matonat (8-bekat)", ["matonat bekati", "матонат бекати", "8-bekat", "8-бекат"]),
+            ("Qiyot (9-bekat)", ["qiyot bekati", "қиёт бекати", "кият бекати", "9-bekat", "9-бекат"]),
+            ("Tolariq (10-bekat)", ["tolariq bekati", "толариқ бекати", "толарык", "10-bekat", "10-бекат"]),
+            ("Xonobod (11-bekat)", ["xonobod bekati", "хонобод бекати", "ханабад", "11-bekat", "11-бекат"]),
+            ("Quruvchilar (12-bekat)", ["quruvchilar bekati", "қурувчилар бекати", "стронтелей", "12-bekat", "12-бекат"]),
+            ("Turon (13-bekat)", ["turon bekati", "турон бекати", "13-bekat", "13-бекат"]),
+            ("Qipchoq (14-bekat)", ["qipchoq bekati", "қипчоқ бекати", "кипчак бекати", "14-bekat", "14-бекат"])
+        ]
+    }
+}
+
+# Bekatlar (O'zbek Lotin, Kirill va Rus tillarida)
 SPECIFIC_STATIONS = [
     # Lotin
     "paxtakor bekati", "chilonzor bekati", "amir temur bekati",
@@ -92,10 +182,13 @@ SPECIFIC_STATIONS = [
     "olmazor bekati", "kosmonavtlar bekati", "oybek bekati",
     "tinchlik bekati", "g'afur g'ulom bekati", "chorsu bekati",
     "mashinasozlar bekati", "toshkent bekati", "sergeli bekati",
-    "xalqlar do'stligi bekati", "milliy bog' bekati", "mirzo ulug'bek bekati",
-    "hamid olimjon bekati", "pushkin bekati", "choshtepa bekati",
-    "texnopark bekati", "yangiobod bekati", "rohat bekati",
-    "qo'yliq bekati", "chinor bekati", "yangihayot bekati",
+    "sirg'ali bekati", "xalqlar do'stligi bekati", "milliy bog' bekati",
+    "mirzo ulug'bek bekati", "hamid olimjon bekati", "pushkin bekati",
+    "choshtepa bekati", "o'zgarish bekati", "chinor bekati", "yangihayot bekati",
+    "texnopark bekati", "yashnobod bekati", "tuzel bekati", "olmos bekati",
+    "rohat bekati", "yangiobod bekati", "qo'yliq bekati", "matonat bekati",
+    "qiyot bekati", "tolariq bekati", "xonobod bekati", "quruvchilar bekati",
+    "turon bekati", "yunus rajabiy bekati", "mustaqillik maydoni bekati",
     # Kirill
     "пахтакор бекати", "чилонзор бекати", "амир темур бекати",
     "буюк ипак йўли бекати", "беруний бекати", "дўстлик бекати",
@@ -105,10 +198,13 @@ SPECIFIC_STATIONS = [
     "олмазор бекати", "космонавтлар бекати", "ойбек бекати",
     "тинчлик бекати", "ғафур ғулом бекати", "чорсу бекати",
     "машинасозлар бекати", "тошкент бекати", "сергели бекати",
-    "халқлар дўстлиги бекати", "миллий боғ бекати", "мирзо улуғбек бекати",
-    "ҳомид олимжон бекати", "пушкин бекати", "чоштепа бекати",
-    "технопарк бекати", "янгиобод бекати", "роҳат бекати",
-    "қўйлиқ бекати", "чинор бекати", "янгиҳаёт бекати",
+    "сирғали бекати", "халқлар дўстлиги бекати", "миллий боғ бекати",
+    "мирзо улуғбек бекати", "ҳомид олимжон бекати", "пушкин бекати",
+    "чоштепа бекати", "ўзгариш бекати", "чинор бекати", "янгиҳаёт бекати",
+    "технопарк бекати", "яшнобод бекати", "тузел бекати", "олмос бекати",
+    "роҳат бекати", "янгиобод бекати", "қўйлиқ бекати", "матонат бекати",
+    "қиёт бекати", "толариқ бекати", "хонобод бекати", "қурувчилар бекати",
+    "турон бекати", "юнус ражабий бекати", "мустақиллик майдони бекати",
     # Ruscha
     "станция пахтакор", "станция чилонзор", "станция амир темур",
     "станция беруни", "станция дустлик", "станция новза",
@@ -117,16 +213,17 @@ SPECIFIC_STATIONS = [
     "станция кипчак", "станция алмазар", "станция космонавтов",
     "станция айбек", "станция тинчлик", "станция чорсу",
     "станция дружбы народов", "станция национальный парк", "станция мирзо улугбек",
-    "станция хамида олимджана", "станция пушкина", "станция сергели"
+    "станция хамида олимджана", "станция пушкина", "станция сергели",
+    "станция технопарк", "станция рохат", "станция куйлюк"
 ]
 
 # Metro yo'nalishlari (O'zbek va Rus tillarida)
 METRO_LINES = [
-    "chilonzor yo'li", "чилонзор йўли", "chilonzor yo'nalishi", "чилонзор йўналиши", "chilonzor liniyasi", "чилонзор линияси",
-    "yunusobod yo'li", "юнусобод йўли", "yunusobod yo'nalishi", "юнусобод йўналиши", "yunusobod liniyasi", "юнусобод линияси",
-    "o'zbekiston yo'li", "o'zbekiston metro", "ўзбекистон метро", "o'zbekiston yo'nalishi", "ўзбекистон йўналиши метро", "o'zbekiston liniyasi",
+    "chilonzor yo'li", "чилонзор йўли", "chilonzor yo'nalishi", "чилонзор йўналиши", "chilonzor liniyasi", "чилонзор линияси", "чиланзарская линия",
+    "yunusobod yo'li", "юнусобод йўли", "yunusobod yo'nalishi", "юнусобод йўналиши", "yunusobod liniyasi", "юнусобод линияси", "юнусабадская линия",
+    "o'zbekiston yo'li", "o'zbekiston metro", "ўзбекистон метро", "o'zbekiston yo'nalishi", "ўзбекистон йўналиши", "o'zbekiston liniyasi", "узбекистанская линия",
     "sergeli yo'li", "sergeli metro", "сергели метро", "sergeli yo'nalishi", "сергели йўналиши", "sergeli liniyasi",
-    "halqa yo'li", "halqa metro", "ҳалқа метро", "yerusti halqa yo'li", "ерусти ҳалқа йўли", "halqa liniyasi", "ҳалқа линияси",
+    "halqa yo'li", "halqa metro", "ҳалқа метро", "yerusti halqa yo'li", "ерусти ҳалқа йўли", "halqa liniyasi", "ҳалқа линияси", "кольцевая линия",
     "yerusti metro", "yerusti metrosi", "ерусти метро", "yer osti metro", "yerosti transporti", "ер ости метро"
 ]
 
@@ -460,4 +557,136 @@ def explain_filter(title: str, content: str) -> Dict:
             "reason": "Metro, bekat yoki metropoliten bilan bog'liq kalit so'z topilmadi.",
             "matched": []
         }
+
+
+# =========================================================================
+# LINIYA, BEKAT VA HODISA STATUSINI AVTOMATIK ANIQLASH
+# =========================================================================
+
+DISRUPTION_PATTERNS = [
+    r"\bto['`’]?xta(?:b\s+qoldi|tildi|sh|b|yapti)\b",
+    r"\bтўхта(?:б\s+қолди|тилди|ш|б|япти)\b",
+    r"\bnosozlik\b", r"\bносозлик\b",
+    r"\bkechik(?:ish|yapti|moqda|di)\b", r"\bкечик(?:иш|япти|моқда|ди)\b",
+    r"\bto['`’]?xtash\b", r"\bузр\s+сўраймиз\b", r"\buzr\s+so['`’]?raymiz\b",
+    r"\bharakat\s+to['`’]?xtatildi\b", r"\bприостановлен[оаы]\b", r"\bсбой\b", r"\bзадержк[аие]\b"
+]
+
+RESOLUTION_PATTERNS = [
+    r"\btiklan(?:di|gan|moqda|ishi)\b", r"\bтиклан(?:ди|ган|моқда|иши)\b",
+    r"\bqayta\s+tiklandi\b", r"\bқайта\s+тикланди\b",
+    r"\byo['`’]?lga\s+qo['`’]?yildi\b", r"\bйўлга\s+қўйилди\b",
+    r"\bqayta\s+yo['`’]?lga\s+qo['`’]?yildi\b", r"\bқайта\s+йўлга\s+қўйилди\b",
+    r"\bbartaraf\s+etildi\b", r"\bбартараф\s+этилди\b",
+    r"\bodatiy\s+rejim(?:da|ga)\b", r"\bодатий\s+режим(?:да|га)\b",
+    r"\bharakat\s+(?:qayta\s+)?tiklandi\b", r"\bҳаракат\s+(?:қайта\s+)?тикланди\b",
+    r"\bвозобновлен[оаы]\b", r"\bвосстановлен[оаы]\b", r"\bнормализован[оаы]\b",
+    r"\bустранен[оаы]\b", r"\bв\s+штатном\s+режиме\b"
+]
+
+COMPILED_DISRUPTION = [re.compile(p, re.IGNORECASE) for p in DISRUPTION_PATTERNS]
+COMPILED_RESOLUTION = [re.compile(p, re.IGNORECASE) for p in RESOLUTION_PATTERNS]
+
+
+def is_disruption_text(text: str) -> bool:
+    """Matnda harakat to'xtashi yoki nosozlik bor-yo'qligini tekshirish."""
+    cleaned = clean_text(text)
+    return any(p.search(cleaned) for p in COMPILED_DISRUPTION)
+
+
+def is_resolution_text(text: str) -> bool:
+    """Matnda harakat qayta tiklangani yoki nosozlik bartaraf etilganini tekshirish."""
+    cleaned = clean_text(text)
+    return any(p.search(cleaned) for p in COMPILED_RESOLUTION)
+
+
+def _match_station_keyword(kw: str, cleaned_text: str) -> bool:
+    """Bekat kalit so'zini qo'shimchalari (bekatida, bekatidan, stantsiyasi) bilan tekshirish."""
+    if " bekati" in kw:
+        root = kw.replace(" bekati", "").strip()
+        pat = rf"(?<!\w){re.escape(root)}\s+bekat(?:i|ida|idan|iga|ini|ining|larda|lar)?(?!\w)"
+        return bool(re.search(pat, cleaned_text))
+    if " бекати" in kw:
+        root = kw.replace(" бекати", "").strip()
+        pat = rf"(?<!\w){re.escape(root)}\s+бекат(?:и|ида|идан|ига|ини|ининг|ларда|лар)?(?!\w)"
+        return bool(re.search(pat, cleaned_text))
+    if kw.startswith("станция "):
+        root = kw.replace("станция ", "").strip()
+        pat = rf"(?<!\w)(?:станци[яиеюей]\s+)?{re.escape(root)}(?!\w)"
+        return bool(re.search(pat, cleaned_text))
+    
+    pat = rf"(?<!\w){re.escape(kw)}(?:da|dan|ga|ka|qa|ni|ning|si|sida|sidan|siga|да|дан|га|ни|нинг|е|а|у|ом|ы|и|ов)?(?!\w)"
+    return bool(re.search(pat, cleaned_text))
+
+
+def _match_keyword_flex(kw: str, cleaned_text: str) -> bool:
+    """Kalit so'zni apostroflar (do'stlik/dostlik, yo'li/yoli) va qo'shimchalar bilan tekshirish."""
+    # 1. Asl matn bilan tekshirish
+    if _match_station_keyword(kw, cleaned_text):
+        return True
+
+    # 2. Apostrofsiz matn bilan tekshirish (dostlik <-> do'stlik)
+    cleaned_no_apos = cleaned_text.replace("'", "")
+    kw_no_apos = kw.replace("'", "")
+    if kw_no_apos != kw or "'" in cleaned_text:
+        if _match_station_keyword(kw_no_apos, cleaned_no_apos):
+            return True
+
+    return False
+
+
+def detect_line_and_station(text: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Matn ichidan Toshkent metrosi yo'nalishi (Liniyasi) va aniq bekatini aniqlash.
+    Natija: (line_badge, station_badge)
+    Masalan: ("🔴 Chilonzor yo'li", "📌 Novza bekati")
+    """
+    cleaned = clean_text(text)
+
+    # 1. Bekat nomi bo'yicha aniqlash (Bekat aniqlansa, liniya ham avtomatik aniqlanadi)
+    for _, line_info in METRO_LINES_INFO.items():
+        for st_name, st_keywords in line_info["stations"]:
+            for kw in st_keywords:
+                if _match_keyword_flex(kw, cleaned):
+                    detected_station = f"📌 {st_name} bekati"
+                    detected_line = line_info["name"]
+                    return detected_line, detected_station
+
+    # 2. Agar bekat topilmasa, liniya nomi bo'yicha qidirish
+    cleaned_no_apos = cleaned.replace("'", "")
+    for _, line_info in METRO_LINES_INFO.items():
+        for lkw in line_info["keywords"]:
+            if lkw in cleaned or lkw.replace("'", "") in cleaned_no_apos:
+                detected_line = line_info["name"]
+                return detected_line, None
+
+    return None, None
+
+
+def detect_metro_topic(text: str) -> str:
+    """Xabarning asosiy mavzusini yo'lovchilar uchun aniqlash."""
+    cleaned = clean_text(text)
+
+    if is_resolution_text(cleaned):
+        return "🟢 Harakat qayta tiklandi"
+    if is_disruption_text(cleaned):
+        return "Harakat va oraliq intervallar"
+
+    if any(k in cleaned for k in ["narx", "tarif", "чипта", "chipta", "atto", "to'lov", "тулов", "karta", "qr", "стоимость"]):
+        return "To'lov va yo'l haqi tariflari"
+
+    if any(k in cleaned for k in ["yangi poyezd", "yangi tarkib", "5 vagon", "вагон", "vagon", "sostav", "состав", "подвижной состав", "metrobus"]):
+        return "Yangi poyezdlar va modernizatsiya"
+
+    if any(k in cleaned for k in ["rasmiy", "bayonot", "munosabat", "raddiya", "matbuot", "брифинг"]):
+        return "Rasmiy bayonot va munosabat"
+
+    if any(k in cleaned for k in ["ish vaqti", "grafigi", "jadvali", "ochilish", "ish boshlaydi", "yopiladi"]):
+        return "Ish vaqti va harakat jadvali"
+
+    if any(k in cleaned for k in ["xavfsizlik", "eskalator", "lift", "nazorat", "militsiya", "iib"]):
+        return "Xavfsizlik va yo'lovchilarga xizmat"
+
+    return "Toshkent Metropoliteni yangiligi"
+
 

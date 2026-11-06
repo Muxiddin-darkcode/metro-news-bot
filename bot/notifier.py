@@ -98,40 +98,47 @@ async def send_metro_alert(
     pre_analyzed_result: Optional[AIAnalysisResult] = None
 ) -> int:
     """
-    Aniqlangan metro xabarini AI orqali tahlil qilib,
-    fotosurat bilan birga faqat bitta '🔗 Asl manbani ochish' inline tugmasi bilan jo'natadi.
+    Aniqlangan metro xabarini asl sarlavhasi va asl matni bilan (AI o'zgartirishlarisiz),
+    fotosurat va '🔗 Asl manbani ochish' tugmasi bilan yuboradi.
+    AI faqat xabarning haqiqiyligini tekshirish uchun ishlatiladi.
     """
-    # 1. AI tahlilini amalga oshirish
+    # 1. AI orqali haqiqiylikni tekshirish (Verifikatsiya)
     ai_result = pre_analyzed_result
     if ai_result is None:
         try:
-            ai_result = await ai_analyzer.analyze_news(item)
+            ai_result = await ai_analyzer.verify_metro_news(item)
         except Exception as exc:
-            logger.error(f"AI tahlil jarayonida kutilmagan xatolik: {exc}")
-            ai_result = ai_analyzer._build_fallback_result(item, reason="Tahlil jarayonidagi xatolik")
+            logger.error(f"AI verifikatsiya jarayonida xatolik: {exc}")
+            ai_result = ai_analyzer._build_local_result(item)
 
-    # 2. Xabar matnini tayyorlash
+    # Agar AI postni Toshkent metrosiga aloqasiz (reklama/sport/chet el) deb topsa, yuborilmaydi
+    if ai_result and not ai_result.is_metro:
+        logger.info(f"Post rad etildi (AI: Metroga tegishli emas): '{item.title[:60]}' | Sabab: {ai_result.reason}")
+        return 0
+
+    # 2. Xabar matnini tayyorlash (Asl manba sarlavhasi va matni)
     try:
         text = ai_result.to_telegram_html(item)
+        caption_text = ai_result.to_telegram_caption_html(item)
     except Exception as exc:
-        logger.warning(f"AI xabarini HTML formatlashda xato: {exc}, standart formatga o'tilmoqda.")
+        logger.warning(f"Xabarni formatlashda ogohlantirish: {exc}")
         text = format_alert_message(item)
+        caption_text = text
 
-    # Antidublikat xotirasida saqlash
+    # Antidublikat xotirasida asl ma'lumotlarni saqlash
     try:
         from core.deduplicator import deduplicator
-        caption_html = ai_result.to_telegram_caption_html(item) if hasattr(ai_result, "to_telegram_caption_html") else ""
         deduplicator.update_event_ai(
             url=item.url,
-            ai_title=ai_result.title,
-            ai_summary=ai_result.summary,
-            ai_badge=ai_result.badge,
+            ai_title=item.title.strip(),
+            ai_summary=item.content.strip()[:350],
+            ai_badge=ai_result.badge if ai_result else "🚇 METRO XABARI",
             image_url=item.image_url or "",
-            station=ai_result.station_and_line,
-            status=ai_result.incident_status,
-            advice=ai_result.advice,
+            station="",
+            status="",
+            advice="",
             full_html=text,
-            caption_html=caption_html
+            caption_html=caption_text
         )
     except Exception as exc:
         logger.debug(f"Antidublikat xotirasini yangilashda xatolik: {exc}")

@@ -121,7 +121,7 @@ def build_recent_news_text() -> str:
     lines = ["📰 <b>SO'NGGI ANIQLANGAN METRO XABARLARI:</b>\n"]
     for i, ev in enumerate(events, 1):
         t_str = format_uz_time(ev.get("timestamp", 0), "%H:%M | %d.%m")
-        title = html.escape(ev.get("ai_title") or ev.get("title", "Sarlavhasiz"), quote=False)
+        title = html.escape(ev.get("title") or ev.get("ai_title", "Sarlavhasiz"), quote=False)
         source = html.escape(ev.get("source", "Noma'lum"), quote=False)
         badge = ev.get("ai_badge") or "🚇 METRO"
         url = ev.get("url", "")
@@ -132,7 +132,7 @@ def build_recent_news_text() -> str:
 
 
 def build_ai_status_text() -> str:
-    """AI Tahlilchi holati haqida to'liq professional ma'lumot (hech qanday test yoki dummy matnsiz)."""
+    """AI Verifikator holati haqida to'liq professional ma'lumot."""
     st = ai_analyzer.get_status_info()
     status_icon = "🟢 Faol" if st["ai_enabled"] else "⏸️ O'chirilgan"
 
@@ -142,7 +142,7 @@ def build_ai_status_text() -> str:
     total_sources = len(source_manager.telegram_channels) + len(source_manager.web_sources)
 
     return (
-        "🤖 <b>AI TAHLILCHI VA DUBLIKAT NAZORATI TIZIMI</b>\n\n"
+        "🤖 <b>AI VERIFIKATOR VA DUBLIKAT NAZORATI TIZIMI</b>\n\n"
         f"• <b>Umumiy holat:</b> {status_icon}\n\n"
         f"1️⃣ <b>Asosiy provayder (Google Gemini):</b>\n"
         f"   ├ Holati: <b>{gemini_key_str}</b>\n"
@@ -150,8 +150,8 @@ def build_ai_status_text() -> str:
         f"2️⃣ <b>Zaxira provayder (OpenRouter Fallback):</b>\n"
         f"   ├ Holati: <b>{openrouter_key_str}</b>\n"
         f"   └ Model: <code>{st['openrouter_model']}</code>\n\n"
-        "⚡ <b>Qanday ishlaydi?</b>\n"
-        f"Kuzatilayotgan <b>{total_sources} ta</b> nufuzli OAV va Telegram kanallardan kelayotgan har bir metro yangiligi avtomatik tarzda sun'iy intellekt orqali tahlil qilinadi: reklama, chaqiriq va ortiqcha matnlardan tozalanadi, voqea joyi va sababi aniqlanadi hamda rasmi bilan birga guruh va kanalga yetkaziladi. Asosiy provayderda limit tugasa, tizim avtomatik zaxira provayderiga ulanadi."
+        "⚡ <b>Vazifasi va ishlash prinsipi:</b>\n"
+        f"AI matnni o'zgartirmaydi yoki qayta yozmaydi! AI faqat {total_sources} ta manbadan kelgan postlarning haqiqatan ham Toshkent metrosiga tegishli ekanligini 100% aniqlikda tekshiradi (uy-joy reklamalari, sport masofalari va chet el metrosini chetlatadi). Xabarlar asl manba matni bilan tezkor yetkaziladi."
     )
 
 
@@ -287,42 +287,27 @@ async def cmd_today_news(message: Message, state: FSMContext) -> None:
     await message.answer(
         f"📅 <b>BUGUNGI METRO YANGILIKLARI ({now_str})</b>\n\n"
         f"Bugun jami <b>{len(events)} ta</b> metro yangiligi aniqlangan.\n"
-        "AI tahliliy xulosalari va fotosuratlari bilan taqdim etilmoqda:",
+        "Manbalarning o'z asl matnlari va fotosuratlari bilan taqdim etilmoqda:",
         parse_mode="HTML",
         reply_markup=get_main_keyboard()
     )
 
     for idx, ev in enumerate(events, 1):
-        title = html.escape(ev.get("ai_title") or ev.get("title", "Sarlavhasiz"), quote=False)
+        title = html.escape(ev.get("title") or ev.get("ai_title", "Sarlavhasiz"), quote=False)
         badge = html.escape(ev.get("ai_badge") or "🚇 METRO XABARI", quote=False)
-        raw_summary = ev.get("ai_summary") or ev.get("content", "")
-        summary = html.escape(safe_truncate_words(raw_summary, 220), quote=False)
+        raw_content = clean_raw_news_text(ev.get("content") or ev.get("ai_summary", ""))
+        content_safe = html.escape(safe_truncate_words(raw_content, 450), quote=False)
         source = html.escape(ev.get("source", "Noma'lum manba"), quote=False)
         t_str = format_uz_time(ev.get("timestamp", 0), "%H:%M")
         url = ev.get("url", "")
         image_url = ev.get("image_url", "")
-        station = ev.get("ai_station", "")
-        status = ev.get("ai_status", "")
-        advice = ev.get("ai_advice", "")
 
-        # Toza, ixcham va to'liq matn ko'rinishi
         lines = [
             f"🚇 <b>TOSHKENT METROSI | {badge}</b>\n",
-            f"📌 <b>{title}</b>\n",
-            f"📋 <b>Tahlil:</b> {summary}\n"
+            f"📌 <b>{title}</b>\n"
         ]
-        details = []
-        if station:
-            st_l = station.lower()
-            if not any(ign in st_l for ign in ["noma'lum", "umumiy tarmoq", "none", "butun", "tutash"]):
-                details.append(f"📍 <b>Hudud:</b> {html.escape(station.strip(), quote=False)}")
-        if status:
-            st_clean = safe_truncate_words(status.strip(), 70)
-            details.append(f"🚦 <b>Holat:</b> {html.escape(st_clean, quote=False)}")
-        if details:
-            lines.append("\n".join(details) + "\n")
-        if advice:
-            lines.append(f"💡 <b>Tavsiya:</b> <i>{html.escape(advice.strip(), quote=False)}</i>\n")
+        if content_safe and content_safe.lower() != title.lower():
+            lines.append(f"{content_safe}\n")
 
         lines.append(f"🕒 <b>Vaqt:</b> {t_str} | 🏛️ <b>Manba:</b> {source}")
         card_text = "\n".join(lines)

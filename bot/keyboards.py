@@ -14,15 +14,11 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
     """
     kb = [
         [
-            KeyboardButton(text="🎛 Panel", style="primary"),
-            KeyboardButton(text="🔍 Tekshirish", style="success")
+            KeyboardButton(text="🔍 Tekshirish", style="success"),
+            KeyboardButton(text="📅 Bugungi xabarlar", style="primary")
         ],
         [
-            KeyboardButton(text="📅 Bugungi xabarlar", style="primary"),
-            KeyboardButton(text="📰 So'nggi xabarlar", style="primary")
-        ],
-        [
-            KeyboardButton(text="🤖 AI Tahlilchi", style="primary"),
+            KeyboardButton(text="📰 So'nggi xabarlar", style="primary"),
             KeyboardButton(text="📊 Tizim holati", style="primary")
         ],
         [

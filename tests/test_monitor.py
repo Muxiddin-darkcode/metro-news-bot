@@ -226,6 +226,30 @@ class TestStrictMetroMonitoring(unittest.TestCase):
         self.assertFalse(contains_cyrillic(fallback.title), "Fallback sarlavhasida krill harflari qolmasligi shart!")
         self.assertFalse(contains_cyrillic(fallback.summary), "Fallback xulosasida krill harflari qolmasligi shart!")
 
+    def test_original_news_formatting_preserves_text(self):
+        from core.ai_analyzer import format_original_news_html, format_original_news_caption
+        from parsers.base import NewsItem
+
+        item = NewsItem(
+            title="Toshkent metrosida 5 vagonli poyezdlar sinovdan o'tkazildi",
+            content="Metropoliten mutaxassislari yangi vagonlarning harakat xavfsizligini tekshirdi.",
+            source_name="Gazeta.uz",
+            url="https://gazeta.uz/metro1",
+            tags=["#metro", "#vagon"]
+        )
+
+        html_text = format_original_news_html(item, badge="🟢 METRO YANGILIGI")
+        caption_text = format_original_news_caption(item, badge="🟢 METRO YANGILIGI")
+
+        # Asl sarlavha va matn buzilmasdan saqlanishi kerak
+        self.assertIn("Toshkent metrosida 5 vagonli poyezdlar sinovdan o'tkazildi", html_text)
+        self.assertIn("Metropoliten mutaxassislari yangi vagonlarning harakat xavfsizligini tekshirdi.", html_text)
+        self.assertIn("Gazeta.uz", html_text)
+        self.assertIn("🟢 METRO YANGILIGI", html_text)
+
+        self.assertIn("Toshkent metrosida 5 vagonli poyezdlar sinovdan o'tkazildi", caption_text)
+        self.assertIn("Gazeta.uz", caption_text)
+
 if __name__ == "__main__":
     unittest.main()
 

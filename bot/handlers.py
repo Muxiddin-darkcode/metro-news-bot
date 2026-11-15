@@ -57,7 +57,6 @@ router = Router()
 def build_dashboard_text() -> str:
     """Asosiy ekran uchun ixcham va to'liq ma'lumot."""
     status_icon = "⏸️ To'xtatilgan" if source_manager.is_paused else "🟢 24/7 Faol"
-    ai_icon = "🟢 Faol (100% asl matn)" if settings.AI_ENABLED else "⏸️ O'chirilgan"
     last_time = "Hali yo'q"
     if source_manager.last_check_time > 0:
         last_time = format_uz_time(source_manager.last_check_time, "%H:%M:%S")

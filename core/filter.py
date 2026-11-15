@@ -351,7 +351,9 @@ FAST_METRO_TRIGGERS = (
     "metro", "метро", "metropoliten", "метрополитен", "toshmetro", "тошметро",
     "подземк", "bekat", "бекат", "станци", "liniya", "линия", "vagon", "вагон",
     "poyezd", "поезд", "eskalator", "эскалатор", "turniket", "турникет",
-    "yerusti", "ерусти", "yer osti", "ер ости"
+    "yerusti", "ерусти", "yer osti", "ер ости", "chipta", "чипта",
+    "mashinist", "машинист", "metrovagonmash", "метровагонмаш", "rels", "рельс",
+    "atto", "атто", "tashmetro"
 )
 
 def clean_text(text: str) -> str:

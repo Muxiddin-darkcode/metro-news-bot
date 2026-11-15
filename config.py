@@ -33,14 +33,6 @@ class Settings(BaseSettings):
     MAX_SEEN_CACHE_SIZE: int = 5000
     REQUEST_TIMEOUT: float = 10.0
 
-    # AI Analyzer settings (Gemini + OpenRouter Fallback)
-    AI_ENABLED: bool = True
-    GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-1.5-flash"
-    OPENROUTER_API_KEY: str = ""
-    OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct"
-    AI_TIMEOUT: float = 25.0
-
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),
         env_file_encoding="utf-8",

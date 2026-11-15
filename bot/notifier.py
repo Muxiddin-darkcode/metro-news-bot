@@ -8,7 +8,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BufferedIn
 from aiogram.exceptions import TelegramBadRequest
 from config import settings, format_uz_time
 from parsers.base import NewsItem
-from core.ai_analyzer import ai_analyzer, AIAnalysisResult
+from core.formatter import format_metro_alert, FormattedAlert
 
 logger = logging.getLogger("MetroMonitor.Notifier")
 
@@ -95,35 +95,17 @@ async def send_metro_alert(
     bot: Bot,
     item: NewsItem,
     chat_ids: Optional[List[int]] = None,
-    pre_analyzed_result: Optional[AIAnalysisResult] = None
+    pre_analyzed_result = None
 ) -> int:
     """
-    Aniqlangan metro xabarini asl sarlavhasi va asl matni bilan (AI o'zgartirishlarisiz),
+    Aniqlangan metro xabarini asl sarlavhasi va asl matni bilan (0ms kechikish bilan),
     fotosurat va '🔗 Asl manbani ochish' tugmasi bilan yuboradi.
-    AI faqat xabarning haqiqiyligini tekshirish uchun ishlatiladi.
+    100% mustaqil mahalliy formatlash mexanizmidan foydalaniladi.
     """
-    # 1. AI orqali haqiqiylikni tekshirish (Verifikatsiya)
-    ai_result = pre_analyzed_result
-    if ai_result is None:
-        try:
-            ai_result = await ai_analyzer.verify_metro_news(item)
-        except Exception as exc:
-            logger.error(f"AI verifikatsiya jarayonida xatolik: {exc}")
-            ai_result = ai_analyzer._build_local_result(item)
-
-    # Agar AI postni Toshkent metrosiga aloqasiz (reklama/sport/chet el) deb topsa, yuborilmaydi
-    if ai_result and not ai_result.is_metro:
-        logger.info(f"Post rad etildi (AI: Metroga tegishli emas): '{item.title[:60]}' | Sabab: {ai_result.reason}")
-        return 0
-
-    # 2. Xabar matnini tayyorlash (Asl manba sarlavhasi va matni)
-    try:
-        text = ai_result.to_telegram_html(item)
-        caption_text = ai_result.to_telegram_caption_html(item)
-    except Exception as exc:
-        logger.warning(f"Xabarni formatlashda ogohlantirish: {exc}")
-        text = format_alert_message(item)
-        caption_text = text
+    # 1. Mahalliy tezyurar formatlash (0ms kechikish, 100% original matn)
+    alert: FormattedAlert = format_metro_alert(item)
+    text = alert.html_text
+    caption_text = alert.caption_text
 
     # Antidublikat xotirasida asl ma'lumotlarni saqlash
     try:
@@ -132,12 +114,12 @@ async def send_metro_alert(
             url=item.url,
             ai_title=item.title.strip(),
             ai_summary=item.content.strip()[:350],
-            ai_badge=ai_result.badge if ai_result else "🚇 METRO XABARI",
+            ai_badge=alert.badge,
             image_url=item.image_url or "",
-            station=ai_result.station if ai_result else "",
-            line=ai_result.line if ai_result else "",
-            topic=ai_result.topic if ai_result else "",
-            is_resolution=ai_result.is_resolution if ai_result else False,
+            station=alert.station,
+            line=alert.line,
+            topic=alert.topic,
+            is_resolution=alert.is_resolution,
             status="",
             advice="",
             full_html=text,
@@ -176,7 +158,7 @@ async def send_metro_alert(
         # Fotosurat bilan yuborish (Photo Card)
         if photo_file or uploaded_photo_id:
             try:
-                caption_text = ai_result.to_telegram_caption_html(item) if hasattr(ai_result, "to_telegram_caption_html") else text
+                caption_payload = caption_text
                 # 1-marta baytlar yuklanadi, keyingi adminlarga Telegram file_id ishlatiladi (tarmoq trafigi va CPU 3x tejaladi)
                 photo_payload = uploaded_photo_id if uploaded_photo_id else photo_file
                 sent_msg = await bot.send_photo(

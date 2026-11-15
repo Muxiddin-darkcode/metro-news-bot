@@ -155,25 +155,6 @@ def get_sources_reply_keyboard(tg_count: int = 0, web_count: int = 0) -> ReplyKe
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, is_persistent=False)
 
 
-def get_ai_reply_keyboard(ai_enabled: bool = True) -> ReplyKeyboardMarkup:
-    """AI Tahlilchi Reply klaviaturasi (qisqa va unikal nomlar bilan)."""
-    if ai_enabled:
-        toggle_btn = KeyboardButton(text="⏸️ AI ni o'chirish", style="danger")
-    else:
-        toggle_btn = KeyboardButton(text="▶️ AI ni yoqish", style="success")
-
-    kb = [
-        [
-            KeyboardButton(text="🔄 Aloqani tekshirish", style="success"),
-            toggle_btn
-        ],
-        [
-            KeyboardButton(text="◀️ Asosiy menyu", style="primary")
-        ]
-    ]
-    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, is_persistent=False)
-
-
 def get_logs_reply_keyboard() -> ReplyKeyboardMarkup:
     """Loglar Reply klaviaturasi (qisqa nomlar bilan)."""
     kb = [

@@ -314,6 +314,36 @@ class TestStrictMetroMonitoring(unittest.TestCase):
         if test_cache.exists():
             test_cache.unlink()
 
+    def test_formatter_instant_engine(self):
+        from core.formatter import format_metro_alert
+        from parsers.base import NewsItem
+
+        # 1. To'xtash hodisasi
+        item_1 = NewsItem(
+            title="Novza bekatida poyezd to'xtab qoldi",
+            content="Texnik nosozlik sababli oraliq intervallar uzaydi.",
+            source_name="Daryo.uz",
+            url="https://daryo.uz/n1"
+        )
+        alert_1 = format_metro_alert(item_1)
+        self.assertEqual(alert_1.line, "🔴 Chilonzor yo'li")
+        self.assertEqual(alert_1.station, "📌 Novza bekati")
+        self.assertFalse(alert_1.is_resolution)
+        self.assertIn("Novza bekatida poyezd to'xtab qoldi", alert_1.html_text)
+        self.assertIn("🔴 Chilonzor yo'li", alert_1.html_text)
+
+        # 2. Tiklanish hodisasi
+        item_2 = NewsItem(
+            title="Novza bekatida harakat qayta tiklandi",
+            content="Nosozlik to'liq bartaraf etildi.",
+            source_name="Kun.uz",
+            url="https://kun.uz/n2"
+        )
+        alert_2 = format_metro_alert(item_2)
+        self.assertTrue(alert_2.is_resolution)
+        self.assertEqual(alert_2.badge, "🟢 HARAKAT QAYTA TIKLANDI")
+        self.assertIn("🟢 <b>HARAKAT QAYTA TIKLANDI</b>", alert_2.html_text)
+
 if __name__ == "__main__":
     unittest.main()
 

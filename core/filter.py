@@ -243,10 +243,17 @@ SPORTS_DISTANCE_PATTERNS = [
     r"\b(?:дистанци[ия]\s+\d+\s*м|\bзабег\b|\bэстафет\w*|\bгребл\w*|\bплавани\w*|\bмедал[ьяеи]\w*|\bазиатск\w+\s+игр\w*|\bчемпионат\w*)",
 ]
 
+# Tijoriy va homiylik reklamalari (Ucell, Click, Payme va boshqa tijoriy postlar)
+SPONSORED_PATTERNS = [
+    r"(?i)(?:^|\n)\s*(?:реклама|#реклама|reklama|#reklama)\s*(?:$|\n)",
+    r"(?i)\b(?:на\s+правах\s+рекламы|hamkorlik\s+asosida|партнерский\s+материал|reklama\s+huquqi\s+asosida)\b"
+]
+
 # Unumdorlikni oshirish uchun regex qoliplarini bir marta oldindan kompilyatsiya qilish
 COMPILED_METRO_EXPLICIT = [re.compile(p, re.IGNORECASE) for p in METRO_EXPLICIT_PATTERNS]
 COMPILED_REAL_ESTATE = [re.compile(p, re.IGNORECASE) for p in REAL_ESTATE_PATTERNS]
 COMPILED_SPORTS_DISTANCE = [re.compile(p, re.IGNORECASE) for p in SPORTS_DISTANCE_PATTERNS]
+COMPILED_SPONSORED = [re.compile(p, re.IGNORECASE) for p in SPONSORED_PATTERNS]
 
 # Toshkent metrosiga oid kuchli, shubhasiz belgilar
 STRONG_METRO_SIGNALS = [
@@ -401,6 +408,10 @@ def is_metro_related(title: str, content: str) -> Tuple[bool, List[str]]:
 
     # 2. Uy-joy yoki ko'chmas mulk reklamalari
     if any(pat.search(cleaned) for pat in COMPILED_REAL_ESTATE):
+        return False, []
+
+    # 2.5 Tijoriy homiylik reklamalari (reklama, на правах рекламы, hamkorlik asosida)
+    if any(pat.search(full_text) for pat in COMPILED_SPONSORED):
         return False, []
 
     # 3. Sport va yengil atletika masofalari (200 metr, suzish, medallar)

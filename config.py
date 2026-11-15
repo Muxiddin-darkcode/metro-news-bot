@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     # Parsing limits
     MAX_SEEN_CACHE_SIZE: int = 5000
     REQUEST_TIMEOUT: float = 10.0
+    AI_ENABLED: bool = False
 
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),

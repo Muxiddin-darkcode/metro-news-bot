@@ -450,14 +450,27 @@ def is_metro_related(title: str, content: str) -> Tuple[bool, List[str]]:
                 matched_tags.append(line_tag)
             break
 
-    # 7.5 Dinamik maxsus kalit so'zlar tekshiruvi (Admin qo'shgan)
+    # 7.5 Dinamik maxsus kalit so'zlar tekshiruvi (Bittalik va birikmali so'zlar)
+    cleaned_words = None
     for kw in _custom_keywords_cache:
-        if kw and kw in cleaned:
-            is_metro = True
-            tag = "#" + kw.replace(" ", "_").replace("'", "")[:20]
-            if tag not in matched_tags:
-                matched_tags.append(tag)
-            break
+        if not kw:
+            continue
+        if " " not in kw:
+            if cleaned_words is None:
+                cleaned_words = set(re.findall(r"[a-zа-яё0-9\'\-]+", cleaned))
+            if kw in cleaned_words:
+                is_metro = True
+                tag = "#" + kw.replace("'", "")[:20]
+                if tag not in matched_tags:
+                    matched_tags.append(tag)
+                break
+        else:
+            if kw in cleaned:
+                is_metro = True
+                tag = "#" + kw.replace(" ", "_").replace("'", "")[:20]
+                if tag not in matched_tags:
+                    matched_tags.append(tag)
+                break
 
     if not is_metro:
         return False, []

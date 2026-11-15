@@ -2,7 +2,8 @@ import json
 import time
 import asyncio
 import logging
-from typing import List, Dict, Tuple
+import datetime
+from typing import List, Dict, Tuple, Optional
 import httpx
 
 from config import settings, logger
@@ -304,6 +305,16 @@ class SourceManager:
 
                     # Kelgusi safar qayta tekshirmaslik uchun xotirada saqlaymiz
                     storage.mark_seen(item.raw_id)
+
+                    # 1.5-qadam: Eski tarixiy postlarni chetlatish (48 soatdan eski xabarlar ogohlantirilmaydi)
+                    if item.published_at:
+                        try:
+                            pub_dt = datetime.datetime.fromisoformat(item.published_at.replace("Z", "+00:00"))
+                            now_dt = datetime.datetime.now(datetime.timezone.utc)
+                            if (now_dt - pub_dt).total_seconds() > 48 * 3600:
+                                continue
+                        except Exception:
+                            pass
 
                     # 2-qadam: Metroga tegishlimi?
                     is_metro, tags = is_metro_related(item.title, item.content)

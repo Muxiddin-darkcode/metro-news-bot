@@ -348,12 +348,8 @@ SINGLE_CHAR_TRANS = str.maketrans({
 
 # Tezkor filtrlash uchun metroga oid birlamchi trigger so'zlar (Fast-path)
 FAST_METRO_TRIGGERS = (
-    "metro", "метро", "metropoliten", "метрополитен", "toshmetro", "тошметро",
-    "подземк", "bekat", "бекат", "станци", "liniya", "линия", "vagon", "вагон",
-    "poyezd", "поезд", "eskalator", "эскалатор", "turniket", "турникет",
-    "yerusti", "ерусти", "yer osti", "ер ости", "chipta", "чипта",
-    "mashinist", "машинист", "metrovagonmash", "метровагонмаш", "rels", "рельс",
-    "atto", "атто", "tashmetro"
+    "metro", "метро", "metropoliten", "метрополитен", "toshmetro", "тошметро", "tashmetro",
+    "подземк", "bekat", "бекат", "станци", "yerusti halqa", "ерусти ҳалқа", "yerosti", "ерости"
 )
 
 def clean_text(text: str) -> str:
@@ -432,9 +428,10 @@ def is_metro_related(title: str, content: str) -> Tuple[bool, List[str]]:
                 matched_tags.append("#metro")
             break
 
-    # 6. Aniq metro bekatlari tekshiruvi ("... bekati")
+    # 6. Aniq metro bekatlari tekshiruvi ("... bekati", "станция ...")
     for st in SPECIFIC_STATIONS:
-        if st in cleaned:
+        pat = rf"(?<![a-zа-яё]){re.escape(st)}(?:da|dan|ga|ni|ning|е|а|у|ом|ы|и|ов)?(?![a-zа-яё])"
+        if re.search(pat, cleaned):
             is_metro = True
             bekat_tag = "#" + st.split()[0].replace("'", "")
             if bekat_tag not in matched_tags:
@@ -443,34 +440,25 @@ def is_metro_related(title: str, content: str) -> Tuple[bool, List[str]]:
 
     # 7. Aniq metro yo'nalishlari tekshiruvi
     for line in METRO_LINES:
-        if line in cleaned:
+        pat = rf"(?<![a-zа-яё]){re.escape(line)}(?:da|dan|ga|ni|ning|е|а|у|ом|ы|и|ов)?(?![a-zа-яё])"
+        if re.search(pat, cleaned):
             is_metro = True
             line_tag = "#" + line.split()[0].replace("'", "")
             if line_tag not in matched_tags:
                 matched_tags.append(line_tag)
             break
 
-    # 7.5 Dinamik maxsus kalit so'zlar tekshiruvi (Bittalik va birikmali so'zlar)
-    cleaned_words = None
+    # 7.5 Dinamik maxsus kalit so'zlar tekshiruvi (Faqat xolis metro jumlalari)
     for kw in _custom_keywords_cache:
         if not kw:
             continue
-        if " " not in kw:
-            if cleaned_words is None:
-                cleaned_words = set(re.findall(r"[a-zа-яё0-9\'\-]+", cleaned))
-            if kw in cleaned_words:
-                is_metro = True
-                tag = "#" + kw.replace("'", "")[:20]
-                if tag not in matched_tags:
-                    matched_tags.append(tag)
-                break
-        else:
-            if kw in cleaned:
-                is_metro = True
-                tag = "#" + kw.replace(" ", "_").replace("'", "")[:20]
-                if tag not in matched_tags:
-                    matched_tags.append(tag)
-                break
+        pat = rf"(?<![a-zа-яё]){re.escape(kw)}(?:da|dan|ga|ni|ning|е|а|у|ом|ы|и|ов)?(?![a-zа-яё])"
+        if re.search(pat, cleaned):
+            is_metro = True
+            tag = "#" + kw.replace(" ", "_").replace("'", "")[:20]
+            if tag not in matched_tags:
+                matched_tags.append(tag)
+            break
 
     if not is_metro:
         return False, []
@@ -627,7 +615,7 @@ def _match_station_keyword(kw: str, cleaned_text: str) -> bool:
         return bool(re.search(pat, cleaned_text))
     if kw.startswith("станция "):
         root = kw.replace("станция ", "").strip()
-        pat = rf"(?<!\w)(?:станци[яиеюей]\s+)?{re.escape(root)}(?!\w)"
+        pat = rf"(?<![a-zа-яё])станци[яиеюей]\s+{re.escape(root)}(?![a-zа-яё])"
         return bool(re.search(pat, cleaned_text))
     
     pat = rf"(?<!\w){re.escape(kw)}(?:da|dan|ga|ka|qa|ni|ning|si|sida|sidan|siga|да|дан|га|ни|нинг|е|а|у|ом|ы|и|ов)?(?!\w)"
